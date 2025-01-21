@@ -24,11 +24,52 @@ require(devtools)
 install_github("WolfgangKonen/SACOBRA", dependencies = NA)
 ```
 
-## Usage
-< how to set up function and constraints >
+or download / clone this github and use the build and install tools in RStudio.
 
-### Examples
-< how to run examples and where the examples are >
+## Usage
+How to set up a constrained optimization proble: Define a function `fn` that accepts a $d$-dimensional vector $\vec{x}$ and returns an $(1+m+r)$-dimensional
+vector $(f,g_1,\ldots,g_m,h_1,\ldots,h_r)$.
+
+How to code which constraint is equality constraint? - Function `fn` should return 
+an $(1+m+r)$-dimensional vector with named elements. The first element is the objective, the 
+other elements are the constraints. All equality constraints should carry the name `equ`. 
+(Yes, it _is_ possible that multiple elements of a vector have the same name.) 
+                     
+```
+help("SACOBRA")
+```
+provides more detailed information.
+
+## Examples
+Some package methods contain examples that can be run with, e.g.,
+```
+example(cobraInit)
+```
+
+### Example *onCircle*
+The problem to solve is the sphere function `sum(x^2)` with the equality constraint that the solution is on a circle with radius 2 and center at c(1,0).
+```
+d=2
+fn=function(x){c(obj=sum(x^2),equ=(x[1]-1)^2+(x[2]-0)^2-4)}
+cobra <- cobraInit(xStart=rep(5,d), fn, fName="onCircle",  
+                   lower=rep(-10,d), upper=rep(10,d), feval=40)
+```
+
+Run cobra optimizer:
+```
+cobra <- cobraPhaseII(cobra)
+```
+
+The true solution is at `solu = c(-1,0)` (the point on the circle closest to the origin)
+where the true optimum is `fn(solu)[1] = 1`
+The solution found by SACOBRA
+```
+print(getXbest(cobra))    # -9.999958e-01 -1.905111e-06
+print(getFbest(cobra))    # 0.9999916
+```
+is pretty close to this.
+
+### Example *G06* 
 < an example with a nice image>
 
 
