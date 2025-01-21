@@ -3,19 +3,10 @@
 #' Constraint Optimization Problem Benchmark (G Function Suite)
 #' 
 #' COP is an object of class \code{R6ClassGenerator} which can be used to access G problems (aka G functions) implementations in R, by simply generating a new instance of 
-#' COP for each G function \code{problem<-COP.new("problem")}. The COP instances have the following useful attributes:\cr
-#' \itemize{
-#' \item name : name of the problem given by the user
-#' \item dimension: dimension of the problem. For the scalable problems \code{G02} and \code{G03}, the dimension should be given by users, otherwise it will be set automaticaly
-#' \item lower: lower boundary of the problem
-#' \item upper: upper boundary of the problem
-#' \item fn: the COP function which can be passed to SACOBRA. (see \code{fn} description in \code{\link{cobraInit}})
-#' \item nConstraints: number of constraints
-#' \item xStart: The suggested optimization starting point
-#' \item solu: the best known solution, (only for diagnostics purposes)
-#' \item info: information about the problem}
-#' G function suite is a set of 24 constrained optimization problems with various properties like 
-#' dimension, number of equality/ inequality constraint, feasibilty ratio, etc. 
+#' COP for each G function \code{problem<-COP.new("problem")}. 
+#' 
+#' The G function suite is a set of 24 constrained optimization problems with various properties like 
+#' dimension, number of equality/ inequality constraint, feasibility ratio, etc. 
 #' Although these problems were introduced as a suite in a technical report at CEC 2006, many of them have been used by different
 #' autors earlier.
 #' \cr For more details see:
@@ -24,14 +15,23 @@
 #' 2006 special session on constrained real-parameter optimization. Journal of
 #' Applied Mechanics 41, 8 (2006), \url{http://www.lania.mx/~emezura/util/files/tr_cec06.pdf}
 #' 
+#' The COP instances have the following useful attributes:\cr
+#' @field name      name of the problem given by the user
+#' @field dimension dimension of the problem. For the scalable problems \code{G02} and \code{G03}, the dimension should be given by users, otherwise it will be set automaticaly
+#' @field lower     lower boundary of the problem
+#' @field upper     upper boundary of the problem
+#' @field fn        the COP function which can be passed to SACOBRA. (see \code{fn} description in \code{\link{cobraInit}})
+#' @field nConstraints number of constraints
+#' @field xStart    the suggested optimization starting point
+#' @field solu      the best known solution, (only for diagnostics purposes)
+#' @field info      information about the problem
 #'   
 #' @examples 
 #' ##creating an instance for G24 problem
 #' G24<-COP$new("G24")
 #' 
 #' ##initializing SACOBRA
-#' cobra <- cobraInit(xStart=G24$lower, fName=G24$name,
-#'                    fn=G24$fn,  
+#' cobra <- cobraInit(xStart=G24$lower, fName=G24$name, fn=G24$fn, 
 #'                    lower=G24$lower, upper=G24$upper, feval=25)
 #'                    
 #' ## Run sacobra optimizer
@@ -42,19 +42,30 @@
 #' print(getXbest(cobra))
 #' print(getFbest(cobra))                    
 #' plot(abs(cobra$df$Best-G24$fn(G24$solu)[1]),log="y",type="l",
-#' ylab="error",xlab="iteration",main=G24$name)
+#'          ylab="error",xlab="iteration",main=G24$name)
 #' 
 #' 
 #' ## creating an instance for G03 in 2-dimensional space
 #' G03<-COP$new("G03",2)
 #' 
 #' ## Initializing sacobra
-#'cobra <- cobraInit(xStart=G03$lower, fn=G03$fn, 
-#'fName=G03$name, lower=G03$lower, upper=G03$upper, feval=40)
+#' cobra <- cobraInit(xStart=G03$lower, fn=G03$fn, fName=G03$name, 
+#'                    lower=G03$lower, upper=G03$upper, feval=40)
+#'                    
+#' ## Run sacobra optimizer
+#' cobra <- cobraPhaseII(cobra)
+#' 
+#' ## The true solution is at solu = G24$solu
+#' ## The solution found by SACOBRA:
+#' print(getXbest(cobra))
+#' print(getFbest(cobra))                    
+#' plot(abs(cobra$df$Best-G24$fn(G24$solu)[1]),log="y",type="l",
+#'      ylab="error",xlab="iteration",main=G24$name)
 #' 
 #' @export
 #' @author Samineh Bagheri, Wolfgang Konen
 #' @keywords datasets
+#' 
 COP<-R6::R6Class("COP",
                  public=list(name=NA,
                              dimension=NA,
@@ -65,6 +76,10 @@ COP<-R6::R6Class("COP",
                              xStart=NA,
                              solu=NA,
                              info=NA,
+                             #' @description
+                             #' Create a G problem
+                             #' @param name       name of the problem 
+                             #' @param dimension  dimension of the problem
                              initialize=function(name,dimension){
                                allProbs=sprintf("G%02i",c(1:24))
                                if (!missing(name)){ 
@@ -78,33 +93,34 @@ COP<-R6::R6Class("COP",
                                  self$dimension <- dimension
                                }else{
                                }
-                             switch(name,
-                                    "G01"={private$callG01()},
-                                    "G02"={private$callG02(self$dimension)},
-                                    "G03"={private$callG03(self$dimension)},
-                                    "G04"={private$callG04()},
-                                    "G05"={private$callG05()},
-                                    "G06"={private$callG06()},
-                                    "G07"={private$callG07()},
-                                    "G08"={private$callG08()},
-                                    "G09"={private$callG09()},
-                                    "G10"={private$callG10()},
-                                    "G11"={private$callG11()},
-                                    "G12"={private$callG12()},
-                                    "G13"={private$callG13()},
-                                    "G14"={private$callG14()},
-                                    "G15"={private$callG15()},
-                                    "G16"={private$callG16()},
-                                    "G17"={private$callG17()},
-                                    "G18"={private$callG18()},
-                                    "G19"={private$callG19()},                                    
-                                    "G20"={private$callG20()},
-                                    "G21"={private$callG21()},
-                                    "G22"={private$callG22()},
-                                    "G23"={private$callG23()},
-                                    "G24"={private$callG24()}) 
-                             }
-                             ),
+                               switch(name,
+                                      "G01"={private$callG01()},
+                                      "G02"={private$callG02(self$dimension)},
+                                      "G03"={private$callG03(self$dimension)},
+                                      "G04"={private$callG04()},
+                                      "G05"={private$callG05()},
+                                      "G06"={private$callG06()},
+                                      "G07"={private$callG07()},
+                                      "G08"={private$callG08()},
+                                      "G09"={private$callG09()},
+                                      "G10"={private$callG10()},
+                                      "G11"={private$callG11()},
+                                      "G12"={private$callG12()},
+                                      "G13"={private$callG13()},
+                                      "G14"={private$callG14()},
+                                      "G15"={private$callG15()},
+                                      "G16"={private$callG16()},
+                                      "G17"={private$callG17()},
+                                      "G18"={private$callG18()},
+                                      "G19"={private$callG19()},                                    
+                                      "G20"={private$callG20()},
+                                      "G21"={private$callG21()},
+                                      "G22"={private$callG22()},
+                                      "G23"={private$callG23()},
+                                      "G24"={private$callG24()}
+                                      ) 
+                             } # initialize
+                         ), # public list
                  private = list(                             
                    callG01=function(){
                      self$fn=function(x){

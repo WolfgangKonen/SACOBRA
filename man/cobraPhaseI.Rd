@@ -23,6 +23,7 @@ from \code{\link{cobraInit}}}
      \item{\code{fbest}}{ the best feasible objective value found }
      \item{\code{xbest}}{ the point in input space yielding the best feasible objective value }
      \item{\code{ibest}}{ the corresponding iteration number (row of cobra$df, of cobra$A)}
+     \item{\code{phase1DesignPoints}}{ number of  points initial design + phase I}
  
   The data frame \strong{cobra$df} contains one row per iteration with columns 
   \describe{

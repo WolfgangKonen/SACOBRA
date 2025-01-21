@@ -283,15 +283,19 @@ cobraPhaseII <- function(cobra){
       cobra$important=FALSE
     }
     xNewIndex<-length(cobra$numViol)
-    DEBUGequ<-FALSE
-    if(cobra$equHandle$active && cobra$verbose==2)DEBUGequ=TRUE
+    #DEBUGequ<-FALSE
+    #if(cobra$equHandle$active && cobra$verbose==2)DEBUGequ=TRUE
+    DEBUGequ <- ifelse(cobra$equHandle$active && cobra$verbose==2, TRUE, FALSE)
     #if(newNumViol==0)browser(expr=(equMargin-newMaxViolOriginal <0))
 
-    verboseprint(cobra$verbose, important=DEBUGequ,(sprintf("%s.[%d]: %f %f | %f | %f|[%f]" 
-                  , phase ,nrow(cobra$A), cobra$A[xNewIndex,1] ,cobra$A[xNewIndex,2] , xNewEval[1] , newMaxViol,currentEps)))
+    verboseprint(cobra$verbose, important=DEBUGequ,(sprintf("%s.[%d]: %f | %f | %f|[%f]" 
+                  , phase ,nrow(cobra$A), cobra$A[xNewIndex,1] , xNewEval[1] , newMaxViol,currentEps)))
+    #verboseprint(cobra$verbose, important=DEBUGequ,(sprintf("%s.[%d]: %f %f | %f | %f|[%f]" 
+    #              , phase ,nrow(cobra$A), cobra$A[xNewIndex,1] ,cobra$A[xNewIndex,2] , xNewEval[1] , newMaxViol,currentEps)))
     #SB: I added another print line which prints the best found solution after several iterations, if we do not have any interest for this the following lines can be commented
     realXbest<-inverseRescale(cobra$xbest,cobra)
     #realXbest<-sapply(1:length(cobra$xbest) , function(i){scales::rescale(cobra$xbest[i],from=c(cobra$newlower,cobra$newupper),to=c(cobra$lower[i],cobra$upper[i]))})
+    
     
     if(cobra$equHandle$active){
      # browser()

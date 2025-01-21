@@ -11,6 +11,12 @@ An object of class \code{numeric} of length 5.
 DRCL
 }
 \description{
-Distance Requirement Cycle, long version: c(0.3,0.05, 0.001, 0.0005,0.0)
+Distance Requirement Cycle, long version: c(0.3,0.05, 0.001, 0.0005,0.0).
+}
+\details{
+Used by \code{adDRC} (adjust DRC, depending on \code{cobra$Fres}) to set cobra$XI.
+}
+\seealso{
+[cobraInit()]
 }
 \keyword{datasets}

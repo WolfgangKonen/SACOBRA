@@ -237,6 +237,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   # }
   
   origA = t(sapply(1:nrow(cobra$A),function(i){ inverseRescale(cobra$A[i,],cobra) }))
+  if (cobra$dimension==1) origA <- t(origA)
   if (is.matrix(solu)) {          # this is for the case with multple solutions (like in G11)
     da=sapply(1:nrow(solu),function(i){ distLine(solu[i,],cobra$A) })
     # da has nrow(solu) columns, each column has the distance of the ith solu to all points cobra$A.

@@ -64,7 +64,8 @@ cobraInit(
 
 \item{fn}{objective and constraint functions: \code{fn} is a function accepting 
 a \code{d}-dimensional vector \eqn{\vec{x}} and returning an \eqn{(1+m+r)}-dimensional
-vector \code{c(}\eqn{f,g_1,\ldots,g_m,h_1,\ldots,h_r}\code{)}}
+vector \code{c(}\eqn{f,g_1,\ldots,g_m,h_1,\ldots,h_r}\code{)}. See Details
+on how to code inequality and equality constraints.}
 
 \item{fName}{the results of \code{\link{cobraPhaseII}} are saved to \code{<fname>.Rdata}}
 
@@ -200,9 +201,9 @@ will be used in \code{\link{cobraPhaseII}}.
      \item{\code{Fres}}{ a vector of the objective values of the initial design points }
      \item{\code{Gres}}{ a matrix of the constraint values of the initial design points }
      \item{\code{nConstraints}}{ the total number \eqn{m+r} of constraints } 
-     \item{\code{Tfeas}}{ the threshhold parameter for the number of consecutive iterations 
+     \item{\code{Tfeas}}{ the threshold parameter for the number of consecutive iterations 
            that yield feasible solutions before margin epsilon is reduced }
-     \item{\code{Tinfeas}}{ the threshhold parameter for the number of consecutive iterations 
+     \item{\code{Tinfeas}}{ the threshold parameter for the number of consecutive iterations 
            that yield infeasible solutions before margin epsilon is increased }
      \item{\code{numViol}}{ number of constraint violations }
      \item{\code{maxViol}}{ maximum constraint violation}

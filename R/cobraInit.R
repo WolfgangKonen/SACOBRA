@@ -38,7 +38,8 @@
 #' @param xStart        a vector of dimension \code{d} containing the starting point for the optimization problem
 #' @param fn            objective and constraint functions: \code{fn} is a function accepting 
 #'                      a \code{d}-dimensional vector \eqn{\vec{x}} and returning an \eqn{(1+m+r)}-dimensional
-#'                      vector \code{c(}\eqn{f,g_1,\ldots,g_m,h_1,\ldots,h_r}\code{)}  
+#'                      vector \code{c(}\eqn{f,g_1,\ldots,g_m,h_1,\ldots,h_r}\code{)}. See Details
+#'                      on how to code inequality and equality constraints.  
 #' @param fName         the results of \code{\link{cobraPhaseII}} are saved to \code{<fname>.Rdata}
 #' @param lower         lower bound \eqn{\vec{a}} of search space, same dimension as \code{xStart}
 #' @param upper         upper bound \eqn{\vec{b}} of search space, same dimension as \code{xStart}
@@ -122,9 +123,9 @@
 #'      \item{\code{Fres}}{ a vector of the objective values of the initial design points }
 #'      \item{\code{Gres}}{ a matrix of the constraint values of the initial design points }
 #'      \item{\code{nConstraints}}{ the total number \eqn{m+r} of constraints } 
-#'      \item{\code{Tfeas}}{ the threshhold parameter for the number of consecutive iterations 
+#'      \item{\code{Tfeas}}{ the threshold parameter for the number of consecutive iterations 
 #'            that yield feasible solutions before margin epsilon is reduced }
-#'      \item{\code{Tinfeas}}{ the threshhold parameter for the number of consecutive iterations 
+#'      \item{\code{Tinfeas}}{ the threshold parameter for the number of consecutive iterations 
 #'            that yield infeasible solutions before margin epsilon is increased }
 #'      \item{\code{numViol}}{ number of constraint violations }
 #'      \item{\code{maxViol}}{ maximum constraint violation}
@@ -204,10 +205,11 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   if(rescale){
     lb<-rep(newlower,dimension)
     up<-rep(newupper,dimension)
-    xStart<-sapply(1:dimension , function(i){scales::rescale(xStart[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))
-    })
-    if(!is.null(solu))solu<-sapply(1:dimension , function(i){scales::rescale(solu[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))
-    })
+    xStart<-sapply(1:dimension, 
+                   function(i){scales::rescale(xStart[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
+    if(!is.null(solu))
+      solu<-sapply(1:dimension, 
+                   function(i){scales::rescale(solu[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
     fn<-rescaleWrapper(fn,originalL,originalU,dimension,newlower,newupper)
     lower<-lb
     upper<-up
@@ -221,7 +223,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   nConstraints<-length(xStartEval)-1
   CONSTRAINED <- ifelse(nConstraints==0, FALSE, TRUE)
   assert("This version does not support conditioning analysis for constrained problems ",!CONSTRAINED || !conditioningAnalysis$active)
- if(!CONSTRAINED)testit::assert("cobraInit: This version does not support trust Region functionality for unconstrained Problems", !TrustRegion )
+  if(!CONSTRAINED)testit::assert("cobraInit: This version does not support trust Region functionality for unconstrained Problems", !TrustRegion )
   
   # old version
   # testit::assert("cobraInit: There should be at least one constraint!",nConstraints>0)
@@ -229,7 +231,6 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   testit::assert("cobraInit: nConstraints cannot be smaller than 0",nConstraints>=0)
 
   if(!CONSTRAINED)verboseprint(verbose=verbose, important=TRUE,"An unconstrained problem is being addressed")
-  
   
   l <- min(upper - lower) # length of smallest side of search space
   if (is.null(epsilonInit)) epsilonInit<- 0.005*l
@@ -277,8 +278,13 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   
   # helper for switch(initDesign): clip all entries in I[,j] to be between lower[j] and upper[j] 
   clipLowerUpper <- function(I,dimension) {
-    I <- t(unlist(sapply(1:nrow(I), FUN=function(i)pmax(I[i,],lower))))
-    I <- t(unlist(sapply(1:nrow(I), FUN=function(i)pmin(I[i,],upper))))
+    if (dimension==1) {       # /WK/2025-01-19/ bug fix: the code before with 
+      I <- pmax(I,lower)      # unlist(...) worked for dimension > 1, but not 
+      I <- pmin(I,upper)      # for dimension=1, where I was wrongly transposed
+    } else {
+      I <- t(unlist(sapply(1:nrow(I), FUN=function(i)pmax(I[i,],lower))))
+      I <- t(unlist(sapply(1:nrow(I), FUN=function(i)pmin(I[i,],upper))))
+    }
     return(I)    
   }
   
@@ -322,7 +328,6 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
            I <- clipLowerUpper(I,dimension)
 
            randomResults<-randomResultsFactory(I,fn,dimension)
-           #browser()
            # update structures for random solutions
            #SB: In order to adapt the code to address unconstraint problems
            if(nConstraints==0){

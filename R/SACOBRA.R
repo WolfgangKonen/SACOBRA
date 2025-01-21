@@ -10,14 +10,14 @@
 
 ######################################################################################
 ######################################################################################
-# Package Description for Roxygene:
+# Package Description for Roxygen:
 #' Self-adjusting Constrained Optimization with RBF Surrogates
 #'
 #' \tabular{ll}{
 #' Package: \tab SACOBRA\cr
 #' Type: \tab Package\cr
-#' Version: \tab 1.1\cr
-#' Date: \tab 16.08.2019\cr
+#' Version: \tab 1.3\cr
+#' Date: \tab 20.01.2025\cr
 #' License: \tab GPL (>= 2)\cr
 #' LazyLoad: \tab yes\cr
 #' }
@@ -48,7 +48,7 @@
 #' to work well on problems with high dimensions (e.g. d=124) and many constraints (e.g. 60).
 #' It is usable for all kind of numerical optimization of continuous functions, but not for combinatorial optimization.
 #' 
-#' For more details see:\cr
+#' For more details on SACOBRA see:\cr
 #' \itemize{
 #'    \item Bagheri, S.; Konen, W.; Baeck, T.: "How to Solve the Dilemma of Margin-Based Equality Handling Methods". 
 #' In: Hoffmann, F. & Huellermeier, E. (Eds.),  Proceedings 28. Workshop Computational Intelligence, 
@@ -90,7 +90,7 @@
 #'                                                
 #' @name SACOBRA-package
 #' @aliases SACOBRA
-#' @docType package
+#' @docType _PACKAGE
 #' @title Self-adjusting Constrained Optimization with RBF Surrogates
 #' @author Samineh Bagheri (\email{Samineh.Bagheri@@th-koeln.de}), \cr
 #' Wolfgang Konen (\email{Wolfgang.Konen@@th-koeln.de}), \cr
@@ -115,12 +115,18 @@ NA #NULL, ends description without hiding first function
 # long and short DRC
 #' Distance Requirement Cycle, long version 
 #' 
-#' Distance Requirement Cycle, long version: c(0.3,0.05, 0.001, 0.0005,0.0)
+#' Distance Requirement Cycle, long version: c(0.3,0.05, 0.001, 0.0005,0.0).
+#' 
+#' Used by \code{adDRC} (adjust DRC, depending on \code{cobra$Fres}) to set cobra$XI.
+#' @seealso [cobraInit()]
 #' @export
 DRCL   <-c(0.3,0.05, 0.001, 0.0005,0.0)
 #' Distance Requirement Cycle, short version 
 #' 
-#' Distance Requirement Cycle, short version: c(0.001,0.0)
+#' Distance Requirement Cycle, short version: c(0.001,0.0).
+#' 
+#' Used by \code{adDRC} (adjust DRC, depending on \code{cobra$Fres}) to set cobra$XI.
+#' @seealso [cobraInit()]
 #' @export
 DRCS   <-c(0.001,0.0)
 
@@ -321,6 +327,7 @@ adCon<-function(cobra){
   
   fnold<-cobra$fn
   
+  testit::assert("[adCon] cobra$Gres contains NA elements", any(is.na(cobra$Gres))==FALSE)
   
   GRL<-apply(cobra$Gres,2,detLen)
   if (min(GRL)==0) {  # pathological case where at least one constraint is constant:
