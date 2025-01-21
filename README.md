@@ -70,6 +70,10 @@ print(getFbest(cobra))    # 0.9999916
 is pretty close to this.
 
 ### Example *G06* 
+<img src="inst/images/G06_sketch.png" alt="G06_sketch" width="30%"/>
+<img src="inst/images/G06_contour_plus_circ.png" alt="G06_contour" width="30%"/>
+
+
 < an example with a nice image>
 
 
