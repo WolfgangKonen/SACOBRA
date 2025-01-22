@@ -24,10 +24,10 @@ require(devtools)
 install_github("WolfgangKonen/SACOBRA", dependencies = NA)
 ```
 
-or download / clone this github and use the build and install tools in RStudio.
+or download / clone this GitHub repo and use the tools in RStudio for building and installing packages.
 
 ## Usage
-How to set up a constrained optimization proble: Define a function `fn` that accepts a $d$-dimensional vector $\vec{x}$ and returns an $(1+m+r)$-dimensional
+How to set up a constrained optimization problem? - Define a function `fn` that accepts a $d$-dimensional vector $\vec{x}$ and returns an $(1+m+r)$-dimensional
 vector $(f,g_1,\ldots,g_m,h_1,\ldots,h_r)$.
 
 How to code which constraint is equality constraint? - Function `fn` should return 
@@ -35,18 +35,26 @@ an $(1+m+r)$-dimensional vector with named elements. The first element is the ob
 other elements are the constraints. All equality constraints should carry the name `equ`. 
 (Yes, it _is_ possible that multiple elements of a vector have the same name.) 
                      
+More detailed information with
 ```
 help("SACOBRA")
 ```
-provides more detailed information.
+
 
 ## Examples
-Some package methods contain examples that can be run with, e.g.,
+Several package methods contain examples that can be run with the following commands:
 ```
-example(cobraInit)
+example(cobraInit)      # onCircle, a problem with equality constraint
+example(cobraPhaseII)   # unconstrained sphere problem
+example(COP)            # load and solve G24, load and solve the scalable problem G03 with d=3
+example(multiCOBRA)     # solve G11 problem nrun=4 times
+example(startCobra)     # solve a 13d-problem with 9 inequality constraints (G01)
 ```
 
 ### Example *onCircle*
+```
+example(cobraInit)     
+```
 The problem to solve is the sphere function `sum(x^2)` with the equality constraint that the solution is on a circle with radius 2 and center at c(1,0).
 ```
 d=2
@@ -62,16 +70,20 @@ cobra <- cobraPhaseII(cobra)
 
 The true solution is at `solu = c(-1,0)` (the point on the circle closest to the origin)
 where the true optimum is `fn(solu)[1] = 1`
-The solution found by SACOBRA
+The solution found by SACOBRA is pretty close to this:
 ```
 print(getXbest(cobra))    # -9.999958e-01 -1.905111e-06
 print(getFbest(cobra))    # 0.9999916
 ```
-is pretty close to this.
+
 
 ### Example *G06* 
-<img src="inst/images/G06_sketch.png" alt="G06_sketch" width="30%"/>
-<img src="inst/images/G06_contour_plus_circ.png" alt="G06_contour" width="30%"/>
+<table>
+  <tr>
+    <td border=0><img src="inst/images/G06_sketch.png" alt="G06_sketch" width="100%"/></td>
+    <td><img src="inst/images/G06_contour_plus_circ.png" alt="G06_contour" width="100%"/></td>
+  </tr>
+</table>
 
 
 < an example with a nice image>
