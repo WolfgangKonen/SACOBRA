@@ -86,7 +86,9 @@ print(getFbest(cobra))    # 0.9999916
   </tr>
 </table>
 
-This optimization problem has two circle-shaped inequality constraint such that the feasible region is a very narrow crescent-shaped region (see images). The objective function is a cubic function such that the true optimum is the yellow dot (lowest point of crescent). SACOBRA has no problem in finding the optimum, even from non-feasible starting points:
+The optimization problem G06 has two circle-shaped inequality constraints such that the feasible region is a very narrow crescent-shaped region (see images). The objective function is a cubic function such that the true optimum is the yellow dot (lowest point of crescent). 
+
+SACOBRA has no problem in finding the optimum in only 40 function evaluations, even from non-feasible starting points:
 
 ```
 G06<-COP$new("G06")
@@ -100,7 +102,7 @@ plot(abs(cobra$df$Best-G06$fn(G06$solu)[1]),log="y",type="l",
 ```
 
 The true solution is at G06$solu = c(14.0950, 0.84296) with objective value -6961.814.
-The solution found by SACOBRA is up to $10^{-6}$ the same.
+The solution found by SACOBRA is up to $10^{-6}$ the same:
 
 <img src="inst/images/G06_errorPlot.png" alt="G06_errorPlot" width="50%"/>
 
