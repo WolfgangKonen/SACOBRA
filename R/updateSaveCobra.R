@@ -29,7 +29,7 @@
 #'    enhanced here by the following elements (among others):
 #'      \item{\code{df}}{  data frame with summary of the optimization run (see below)}
 #'      \item{\code{df2}}{  data frame with additional summary information (see below)}
-#'      \item{\code{dftr}}{  data frame with additional summary information for TR(see \code{\link{cobraPhaseII}})}
+#'      \item{\code{dftr}}{  data frame with additional summary information for TR (see \code{\link{cobraPhaseII}})}
 #'      \item{\code{fbest}}{ the best feasible objective value found }
 #'      \item{\code{xbest}}{ the point in input space yielding the best feasible objective value }
 #'      \item{\code{ibest}}{ the corresponding iteration number (row of \code{cobra$df}, of \code{cobra$A}) }
@@ -114,7 +114,6 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   #   df_RS  <-  c(cobra$df$RS,rep(NA,diff))
   # }
   
-  ro<-gama*cobra$l
   df_RS  <-  c(df_RS,!all(cobra$xbest==cobra$xStart))
   if (cobra$DEBUG_XI) {
     df_fxStart <- c(cobra$df$fxStart,cobra$fn(cobra$xStart)[1])
@@ -123,6 +122,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   }
   
   if (cobra$WRITE_XI) {
+    ro<-gama*cobra$l
     sumViol <- distRequirement(xNew,cobra$fitnessSurrogate,ro)$sumViol
     if (is.null(cobra$df)) {
       df_XI <- c(rep(NA,cobra$initDesPoints),gama)
@@ -193,8 +193,10 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
  
   cobra$fbestArray<-c(cobra$fbestArray,cobra$fbest)
   cobra$xbestArray<-rbind(cobra$xbestArray,cobra$xbest)
+  
+  # feasibleIndices and xbestIndex are never used:
   feasibleIndices <- which(sapply(1:nrow(cobra$Gres),FUN=function(i)(all(cobra$Gres[i,]<0))))
-  xbestIndex<-which.min(cobra$Fres[feasibleIndices])                      # finding index of the best point so far
+  xbestIndex<-which.min(cobra$Fres[feasibleIndices])  # finding index of the best point so far
   
   # only diagnostics, needed for cobra$df & cobra$df2 /WK/
   solu <- cobra$solu; 
@@ -238,7 +240,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   
   origA = t(sapply(1:nrow(cobra$A),function(i){ inverseRescale(cobra$A[i,],cobra) }))
   if (cobra$dimension==1) origA <- t(origA)
-  if (is.matrix(solu)) {          # this is for the case with multple solutions (like in G11)
+  if (is.matrix(solu)) {          # this is for the case with multiple solutions (like in G11)
     da=sapply(1:nrow(solu),function(i){ distLine(solu[i,],cobra$A) })
     # da has nrow(solu) columns, each column has the distance of the ith solu to all points cobra$A.
     # Select this column which has the element with minimum distance.
@@ -251,7 +253,6 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     distOrig = distLine(soluOrig,origA)  # distance in original space
   }
   
-  # result data frame
   testit::assert("[updateSaveCobra] predY",length(cobra$Fres)==length(predY))
   testit::assert("[updateSaveCobra] optimizerConvergence",length(df_predSolu)==length(optimizerConvergence))
   if(cobra$CONSTRAINED){
@@ -263,6 +264,8 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   testit::assert("[updateSaveCobra] cobra$fbestArray",length(cobra$Fres)==length(cobra$fbestArray))
   testit::assert("[updateSaveCobra] ev1$optimizationTime",length(cobra$Fres)==length(ev1$optimizationTime))
   testit::assert("[updateSaveCobra] optimizerConvergence",length(cobra$Fres)==length(optimizerConvergence))
+
+  # result data frame
   if(cobra$CONSTRAINED){
      df <- data.frame(y=cobra$Fres, 
                    predY=predY,           # surrogate fitness
@@ -348,11 +351,16 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     XI=gama,
     fBest=tail(df$Best,1),
     EPS=EPS[1]
+    , PLOG=tail(cobra$PLOG,1)
+    , pEffect=cobra$pEffect
+    , err1=tail(cobra$err1,1)
+    , err2=tail(cobra$err2,1)
     #,fBest2=fitFuncPenalRBF(xNew)    # not the same as predVal, since penaF or sigmaD might have changed (!)
     #,fSolu=fitFuncPenalRBF(min(solu))# not the same as predSolu for the same reason  
     #,feas=feas,
     #,data.frame(xNew,row.names=NULL)
   ))
+  # browser()
   
   cobra$dftr<-rbind(cobra$dftr,data.frame(
     TRiter=cobra$TRiter,

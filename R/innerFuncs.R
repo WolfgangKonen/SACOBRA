@@ -110,7 +110,7 @@ subProb<-function(x,cobra){
   return(y)
 } # subProb()
 
-# surrogate evaluation of 'f' for constraint optimization methods  - PHASE II
+# surrogate evaluation of 'f' for constrained optimization methods  - PHASE II
 subProb2 <- function(x,cobra){
 
   if(any(is.nan(x))){
@@ -135,14 +135,14 @@ gCOBRA <- function(x,cobra) {
     return(c(Inf,rep(Inf,cobra$nConstraints)))
   }
   
-  if(cobra$CONSTRAINED)constraintPrediction <- calcConstrPred(x,cobra);
   h <- c()
   distance <- distLine(x,cobra$A)
   subC<-pmax((cobra$ro-distance),0)
   # h[1] <- sum(subC)*cobra$drFactor
   h[1] <- sum(subC)
-  
-  
+
+  # browser()
+  if(cobra$CONSTRAINED)constraintPrediction <- calcConstrPred(x,cobra);
   DBG=FALSE
   if (DBG & h[1]>0) {
     cat("gCOBRA: ",h,max(constraintPrediction),"\n")
@@ -164,7 +164,6 @@ gCOBRA <- function(x,cobra) {
 #   return(-gCOBRA(x,cobra))
 # }
 
-### --- snip 
 
 isresCobyla <- function(xStart,fn=subProb2,hin=gCOBRA, cobra) {
   #maxeval=cobra$seqFeval; 

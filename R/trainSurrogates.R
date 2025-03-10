@@ -24,8 +24,8 @@ splitMaStrings<-function(x){
 
 #' Training surrogates for objective and constraint functions 
 #' 
-#' This function is called during the second phase of SACOBRA \code{\link{cobraPhaseII}} to train the surrogate models for objective and constarint functions 
-#' of the optimization problem passed to the SACOBRA framework. This function takes all the so-far evalauted points stored in \code{cobra$A} and builds
+#' This function is called during the second phase of SACOBRA \code{\link{cobraPhaseII}} to train the surrogate models for objective and constraint functions 
+#' of the optimization problem passed to the SACOBRA framework. This function takes all the so-far evaluated points stored in \code{cobra$A} and enhances
 #' 
 #'
 #' @param cobra an object of class COBRA, this is a (long) list containing all settings
@@ -90,23 +90,25 @@ trainSurrogates <- function(cobra) {
       #objective model
       sw=switch(lastSelectedModel[[1]][1],
              "cubic"={fitnessModel<-"cubic";
-             cobra$fitnessSurrogate <- trainCubicRBF(A,Fres,ptail=cobra$ptail,squares=cobra$squares,rho=cobra$RBFrho)},
+                      cobra$fitnessSurrogate <- trainCubicRBF(A,Fres,
+                                                  ptail=cobra$ptail,squares=cobra$squares,
+                                                  rho=cobra$RBFrho)},
              "Gaussian"={fitnessModel<-"Gauss";
-             fwidth<-as.numeric(lastSelectedModel[[1]][2]);
-             cobra$fitnessSurrogate <- trainGaussRBF(A,Fres,1,
-                                                     ptail=cobra$ptail,squares=cobra$squares,
-                                                     RULE=cobra$RULE,
-                                                     rho=cobra$RBFrho,
-                                                     widthFactor=fwidth)},
-             "MQ"={fitnessModel<-"MQ";
-             fwidth<-as.numeric(lastSelectedModel[[1]][2]);
-             cobra$fitnessSurrogate <- trainMQRBF(A,Fres,1,
+                      fwidth<-as.numeric(lastSelectedModel[[1]][2]);
+                      cobra$fitnessSurrogate <- trainGaussRBF(A,Fres,1,
                                                   ptail=cobra$ptail,squares=cobra$squares,
                                                   RULE=cobra$RULE,
                                                   rho=cobra$RBFrho,
-                                                  widthFactor=fwidth)})
-      
-      
+                                                  widthFactor=fwidth)},
+             "MQ"=   {fitnessModel<-"MQ";
+                      fwidth<-as.numeric(lastSelectedModel[[1]][2]);
+                      cobra$fitnessSurrogate <- trainMQRBF(A,Fres,1,
+                                                  ptail=cobra$ptail,squares=cobra$squares,
+                                                  RULE=cobra$RULE,
+                                                  rho=cobra$RBFrho,
+                                                  widthFactor=fwidth)}
+             )
+
       COEF<-NULL
       types<-c()
       widths<-c()
@@ -115,25 +117,27 @@ trainSurrogates <- function(cobra) {
         
         sw=switch(lastSelectedModel[[con+1]][1],
                "cubic"={conModel<-"CUBIC";
-               model <- trainCubicRBF(A,Gres[,con],ptail=cobra$ptail,squares=cobra$squares,rho=cobra$RBFrho);
-               COEF<-cbind(COEF,model$coef);
-               cwidth<-0},
-               "MQ"={conModel<-"MQ";
-               cwidth<-as.numeric(lastSelectedModel[[con+1]][2]);
-               model <- trainMQRBF(A,Gres[,con],1,
-                                   ptail=cobra$ptail,squares=cobra$squares,
-                                   RULE=cobra$RULE,
-                                   rho=cobra$RBFrho,
-                                   widthFactor=cwidth);
-               COEF<-cbind(COEF,model$coef)},
+                        cwidth<-0;
+                        model <- trainCubicRBF(A,Gres[,con],
+                                        ptail=cobra$ptail,squares=cobra$squares,
+                                        rho=cobra$RBFrho);
+                        COEF<-cbind(COEF,model$coef)},
+               "MQ"=   {conModel<-"MQ";
+                        cwidth<-as.numeric(lastSelectedModel[[con+1]][2]);
+                        model <- trainMQRBF(A,Gres[,con],1,
+                                        ptail=cobra$ptail,squares=cobra$squares,
+                                        RULE=cobra$RULE,
+                                        rho=cobra$RBFrho,
+                                        widthFactor=cwidth);
+                        COEF<-cbind(COEF,model$coef)},
                "Gaussian"={conModel<-"GAUSS";
-               cwidth<-as.numeric(lastSelectedModel[[con+1]][2]);
-               model <- trainGaussRBF(A,Gres[,con],1,
-                                      ptail=cobra$ptail,squares=cobra$squares,
-                                      RULE=cobra$RULE,
-                                      rho=cobra$RBFrho,
-                                      widthFactor=cwidth);
-               COEF<-cbind(COEF,model$coef)}
+                        cwidth<-as.numeric(lastSelectedModel[[con+1]][2]);
+                        model <- trainGaussRBF(A,Gres[,con],1,
+                                        ptail=cobra$ptail,squares=cobra$squares,
+                                        RULE=cobra$RULE,
+                                        rho=cobra$RBFrho,
+                                        widthFactor=cwidth);
+                        COEF<-cbind(COEF,model$coef)}
         )
         
         types<-c(types,conModel)
@@ -149,12 +153,11 @@ trainSurrogates <- function(cobra) {
                       ,width=widths
                       ,type=types
                       #,AUGMENTED=model$AUGMENTED
-                      
-      )  
+      )
       class(rbf.model) <- c("RBFinter","list")
       cobra$constraintSurrogates<-rbf.model
       
-    }
+    } #end of else (MS-part)
 
   } #end of if cobra$CONSTRAINED
   
@@ -193,18 +196,20 @@ trainSurrogates <- function(cobra) {
     cobra <- debugVisualizeRBF(cobra,cobra$fitnessSurrogate,A,Fres)        # see defaultDebugRBF.R
   }
 
-  #SB: added the possibilty to measure p-effect after every 10 iterations
-  if((cobra$sac$onlinePLOG && nrow(cobra$A)%%cobra$sac$onlineFreqPLOG==0 )|| nrow(cobra$A)==cobra$initDesPoints){
+  #SB: added the possibility to measure p-effect after every 10 iterations
+  #recalc_fit12 = (cobra$sac$onlinePLOG && nrow(cobra$A)%%cobra$sac$onlineFreqPLOG==0 )|| nrow(cobra$A)==cobra$initDesPoints
+  recalc_fit12 = T  # temporarily
+  if(recalc_fit12){
+    # SB: adapted to the hessian calculation
+    # /WK/2025/03/06: this is probably wrong, because Fres may be potentially already plog-transformed: 
+    # Fres1<-Fres              #without plog
+    # Fres2<-sapply(Fres,plog) #with plog
     
-   # Fres1<-cobra$Fres             #without plog
-   # Fres2<-sapply(cobra$Fres,plog)#with plog
-    
-    #adapted to the hessian calculation
-    Fres1<-Fres             #without plog
-    Fres2<-sapply(Fres,plog)#with plog
-    
+    # /WK/2025/03/06: we therefore return to the older version, which was commented out before 2025/03/06:
+    Fres1<-cobra$Fres               #without plog
+    Fres2<-sapply(cobra$Fres,plog)  #with plog
+
     #two models are built after each onlineFreqPLOG iterations:
-    #                                            fitnessSurrogate1-> 
     sw=switch(cobra$RBFmodel,
               "cubic" =     {
                 cobra$fitnessSurrogate1 <- trainCubicRBF(A,Fres1,ptail=cobra$ptail,squares=cobra$squares,rho=cobra$RBFrho)
@@ -212,15 +217,20 @@ trainSurrogates <- function(cobra) {
               "Gaussian"=   {
                 cobra$fitnessSurrogate1 <- trainGaussRBF(A,Fres1,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor)
                 cobra$fitnessSurrogate2 <- trainGaussRBF(A,Fres2,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor)},
-              "MQ" = {cobra$fitnessSurrogate1 <- trainMQRBF(A,Fres1,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor);
-              cobra$fitnessSurrogate2 <- trainMQRBF(A,Fres2,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor)},
+              "MQ" = {
+                cobra$fitnessSurrogate1 <- trainMQRBF(A,Fres1,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor);
+                cobra$fitnessSurrogate2 <- trainMQRBF(A,Fres2,cobra$RBFwidth,ptail=cobra$ptail,squares=cobra$squares,RULE=cobra$RULE,rho=cobra$RBFrho,widthFactor=cobra$widthFactor)},
               "InvalidRBFmodel"
     ) 
-    
-  }
-  testit::assert(sprintf("Wrong value %s for cobra$RBFmodel",sw),sw!="InvalidRBFmodel")
+    testit::assert(sprintf("Wrong value %s for cobra$RBFmodel",sw),sw!="InvalidRBFmodel")
+  } # if(recalc_fit12)
+  
+  
   DO_ASSERT=F
   if (DO_ASSERT) {
+    ### test that at the observation points A = cobra$A, all three models, 
+    ### fn(A), cobra$Gres, cobra$constraintSurrogates(A) are the same
+    #
     #might need adjust due to rescale /WK/  
     conFunc <- {function(x)cobra$fn(x)[-1];}
     Gres = t(sapply(1:nrow(cobra$A),function(i){conFunc(cobra$A[i,])}))
@@ -234,12 +244,10 @@ trainSurrogates <- function(cobra) {
         print(max(abs(z))) #do we need this?
       }        
     }
-    cat("All assertions passed\n")
+    cat("[trainSurrogates] All assertions passed\n")
   }
   
   verboseprint(cobra$verbose, important=FALSE,paste(" finished (",(proc.time() - ptm)[3],"sec )"))
   return(cobra);
   
 } # trainSurrogates()
-
-

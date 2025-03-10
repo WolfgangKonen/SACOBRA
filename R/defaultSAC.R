@@ -20,7 +20,7 @@
 #'    for \code{DOSAC=[0|1|2]}):
 #'      \item{RS}{  flag for random start algorithm \code{[FALSE|TRUE|TRUE]}  }
 #'      \item{RStype}{type of the function to calculate probability to start the internal optimizer 
-#'          with a random starting point\code{[NA|"SIGMOID"|"CONSTANT"]} (see function 
+#'          with a random starting point\code{[NA|"SIGMOID"|"CONSTANT"]} (see class 
 #'          \code{\link{RandomStart}} in \code{SACOBRA.R})}
 #'      \item{RSmax}{maximum probability of a random start when \code{RStype=="SIGMOID"} 
 #'          (see \code{\link{RandomStart}} in \code{SACOBRA.R}). If \code{RStype=="CONSTANT"} then  
@@ -29,7 +29,9 @@
 #'      \item{RSmin}{minimum probability of a random start when \code{RStype=="SIGMOID"}  
 #'          (see \code{\link{RandomStart}} in \code{SACOBRA.R}) \code{[NA|0.05|0.05]} }
 #'      \item{RSAUTO}{If TRUE then in every iteration where the fraction of feasible points in the population 
-#'          is smaller than 0.05, the RS probability is set to 0.3. \code{[FALSE|FALSE|TRUE]}  }
+#'          is smaller than 0.05, the RS probability is set to 0.4. \code{[FALSE|FALSE|TRUE]}  }
+#'      \item{RS_Cs}{  If  \code{RS_Cs} iterations in a row do not improve the ever-best feasible solution, 
+#'          then perform a random restart. \code{[10|10|10]}  }
 #'      \item{aDRC}{  flag for automatic DRC adjustment \code{[FALSE|TRUE|TRUE]}  }
 #'      \item{aFF}{  flag for automatic objective function transformation \code{[FALSE|TRUE|TRUE]}  }
 #'      \item{aCF}{  flag for automatic constraint function transformation \code{[FALSE|TRUE|TRUE]}  }
@@ -39,12 +41,10 @@
 #'          constraint function transformation. \code{GRatio} is the ratio "largest \code{GRange} /
 #'          smallest \code{GRange}" where \code{GRange} is the min-max range of a specific constraint.
 #'          If \code{TGR < 1}, then the transformation is always performed.  \code{[Inf|1e+03|-1]}.}
-#'      \item{Cs}{  If  \code{Cs} iterations in a row do not improve the ever-best feasible solution, 
-#'          then perform a random restart. \code{[10|10|10]}  }
 #'      \item{adaptivePLOG}{  (experimental) flag for objective function transformation with \code{\link{plog}}, 
 #'          where the parameter \code{pShift} is adapted during iterations. 
 #'          \code{[FALSE|FALSE|FALSE]} }
-#'      \item{onlinePLOG}{ flag for online decision making wether use plog or not according to p-effect \code{\link{plog}}. 
+#'      \item{onlinePLOG}{ flag for online decision marking whether to use plog or not according to p-effect \code{\link{plog}}. 
 #'          \code{[FALSE|FALSE|TRUE]} }
 #'      \item{pEffectInit}{Initial pEffect value when using onlinePLOG. If pEffectInit >= 2 then the initial model is built after plog transformation.
 #'          \code{[NA|NA|2]}}
@@ -68,15 +68,17 @@ defaultSAC<-function(DOSAC=1){
               RSAUTO=FALSE,
               RSmax=0.3, #maximum probability of a random start
               RSmin=0.05, #minimum probability of a random start
+              RS_Cs=10,
+              RS_rep=FALSE,   # only TRUE for testing R vs. Python (reproducible RNG in RandomStart)
               aDRC=TRUE,
               aFF=TRUE,
               TFRange=1e+05,
               aCF=TRUE,
-              TGR=1e+03,   #GR threshold to perform constraint modification, 
-              #if TGR < 1 transformation is always performed,
-              # Inf value means transfomration is never performed
-              # a positive value laarger than 1 means: 
-              #the transfomartion is only performed for problems with a GR larger than TGR
+              TGR=1e+03,   # GR threshold to perform constraint modification, 
+              # if TGR < 1 transformation is always performed,
+              # Inf value means transformation is never performed
+              # a positive value larger than 1 means: 
+              # the transformation is only performed for problems with a GR larger than TGR 
               conPLOG=FALSE, #perform plog transformation for all constraints (In testing phase) 
               conFitPLOG=FALSE, #perform plog transformation for all constraints and fitness (In testing phase)
               adaptivePLOG=FALSE, #the effectivity of adaptivePLOG is not fully proved therefore I keep it as FALSE for now
@@ -84,8 +86,7 @@ defaultSAC<-function(DOSAC=1){
               onlineFreqPLOG=10, # number of iterations in a row which after that the online DOPLOG check is done
               pEffectInit=0,
               minMaxNormal=F,
-              onlineMinMax=F,
-              Cs=10)
+              onlineMinMax=F)
   }
   if(DOSAC==2){
     sac<-list(RS=TRUE,
@@ -93,15 +94,17 @@ defaultSAC<-function(DOSAC=1){
               RSAUTO=TRUE,
               RSmax=0.3, #maximum probability of a random start
               RSmin=0.05, #minimum probability of a random start
+              RS_Cs=10,
+              RS_rep=FALSE,   
               aDRC=TRUE,
               aFF=TRUE,
               TFRange=-1,
               aCF=TRUE,
-              TGR=-1,   #GR threshold to perform constraint modification, 
-              #if TGR < 1 transformation is always performed,
-              # Inf value means transfomration is never performed
-              # a positive value laarger than 1 means: 
-              #the transfomartion is only performed for problems with a GR larger than TGR
+              TGR=-1,   # GR threshold to perform constraint modification, 
+              # if TGR < 1 transformation is always performed,
+              # Inf value means transformation is never performed
+              # a positive value larger than 1 means: 
+              # the transformation is only performed for problems with a GR larger than TGR 
               conPLOG=FALSE, #perform plog transformation for all constraints (In testing phase) 
               conFitPLOG=FALSE, #perform plog transformation for all constraints and fitness (In testing phase)
               adaptivePLOG=FALSE, #the effectivity of adaptivePLOG is not fully proved therefore I keep it as FALSE for now
@@ -109,8 +112,7 @@ defaultSAC<-function(DOSAC=1){
               onlineFreqPLOG=10, # number of iterations in a row which after that the online DOPLOG check is done
               pEffectInit=3,
               minMaxNormal=F,
-              onlineMinMax=F,
-              Cs=10)
+              onlineMinMax=F)
   }
   
   if(DOSAC==0){
@@ -119,15 +121,17 @@ defaultSAC<-function(DOSAC=1){
               RSAUTO=FALSE,
               RSmax=0.3, #maximum probability of a random start
               RSmin=0.05, #minimum probability of a random start
+              RS_Cs=10,
+              RS_rep=FALSE,
               aDRC=FALSE,
               aFF=FALSE,
               TFRange=Inf,
               aCF=FALSE,
-              TGR=Inf,   #GR threshold to perform constraint modification, 
-              #if TGR < 1 transformation is always performed,
-              # Inf value means transfomration is never performed
-              # a positive value laarger than 1 means: 
-              #the transfomartion is only performed for problems with a GR larger than TGR 
+              TGR=Inf,   # GR threshold to perform constraint modification, 
+              # if TGR < 1 transformation is always performed,
+              # Inf value means transformation is never performed
+              # a positive value larger than 1 means: 
+              # the transformation is only performed for problems with a GR larger than TGR 
               conPLOG=FALSE, #perform plog transformation for all constraints (In testing phase)
               conFitPLOG=FALSE, #perform plog transformation for all constraints and fitness (In testing phase)
               adaptivePLOG=FALSE,
@@ -135,8 +139,7 @@ defaultSAC<-function(DOSAC=1){
               onlineFreqPLOG=10,
               pEffectInit=0,
               minMaxNormal=F,
-              onlineMinMax=F,
-              Cs=10)
+              onlineMinMax=F)
   }
 return(sac)  
 }

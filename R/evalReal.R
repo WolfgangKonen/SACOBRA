@@ -150,9 +150,8 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
   ev1$optimizationTime <- c(ev1$optimizationTime, optimTime )
   newPredC<-c()
   if(cobra$CONSTRAINED){
-  newPredC <- interpRBF(ev1$xNew,cobra$constraintSurrogates)
-  ev1$predC <- rbind(ev1$predC,newPredC)
-  
+    newPredC <- interpRBF(ev1$xNew,cobra$constraintSurrogates)
+    ev1$predC <- rbind(ev1$predC,newPredC)
   }
   
   ### Old version was
@@ -163,13 +162,11 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
   #xNewTemp <- ev1$xNew
   ev1$xNewEval<-fn(ev1$xNew)
   if(cobra$CA$active && cobra$TFlag){
-    
-   xNewT<-(ev1$xNew-cobra$tCenter)%*%cobra$TM
-   xNewT<-xNewT+cobra$tCenter
-   ev1$xNewEvalT<-fn(xNewT)
-
-    
+     xNewT<-(ev1$xNew-cobra$tCenter)%*%cobra$TM
+     xNewT<-xNewT+cobra$tCenter
+     ev1$xNewEvalT<-fn(xNewT)
   }
+  
   if(!cobra$CONSTRAINED){
     ev1$newNumViol<-0
     ev1$newMaxViol<-0
@@ -208,11 +205,11 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
     M <-  max(0,max(temp))  # maximum violation
     try(if(M <= cobra$conTol){M<=0 })
     if(class(.Last.value)[1]=="try-error"){
-      print("an Error Occurred in line 187 evalReal.R")
+      print("an error occurred in line 187 evalReal.R")
       browser()}
     else{
-     # print("no exception")  
-      }
+      # print("no exception")  
+    }
     ev1$newMaxViol <- M  
     #SB: added the following lines, because it is also interesting to observe or save the information 
     #about the real maximum violation instead of the maximum distance to the artificial constraints 

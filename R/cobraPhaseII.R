@@ -85,8 +85,8 @@
 #
 # - cobra$df contains one row for each iteration, including initial points (see updateSaveCobra.R)
 #   cobra$df2 contains one row for each phase-II iteration only (see updateSaveCobra.R)
-# - cobra$PLOG is set by adFit (SACOBRA.R) and adFit is called at the start of each iteration
-#   (see trainSurrogates.R)
+# - cobra$PLOG is a boolean vector with length number of phase-II-iterations. The last element is set 
+#   by adFit (SACOBRA.R) and adFit is called at the start of each iteration (see trainSurrogates.R)
 # - cobra$solu is always in original input space. But when it is used (for diagnostics) in 
 #   updateSaveCobra, then a local copy \code{solu} is made, and - if cobra$rescale==TRUE - 
 #   \code{solu} is transformed to the rescaled space.
@@ -125,7 +125,7 @@ cobraPhaseII <- function(cobra){
   cobra$selectedModel<-NULL
   cobra$MSXI<-c()
   cobra$WRITE_XI<-TRUE
-  globalOptCounter<-1
+  globalOptCounter = 0  # /WK/2025/03/06: changed from former setting 1 to be in sync with Python side and to start with the first element of DRC
   fn=cobra$fn
   dimension=cobra$dimension
   nConstraints <- cobra$nConstraints
@@ -259,7 +259,7 @@ cobraPhaseII <- function(cobra){
     return(sigmaD)
   }
       
-  # update cobra information (A, Fres, Gres)
+  # update cobra information (A, Fres, Gres and others)
   # update counters Cfeas, Cinfeas on the global level of cobraPhaseII
   #
   updateInfoAndCounters <- function(cobra,xNew,xNewEval,newNumViol,
@@ -332,7 +332,7 @@ cobraPhaseII <- function(cobra){
   adjustMargins <- function(Cfeas,Tfeas,Cinfeas,Tinfeas,EPS,epsMax,currentEps) {
     if(Cfeas >= Tfeas){
       EPS <<- EPS/2
-      verboseprint(cobra$verbose, important=FALSE,sprintf("reducing epsilon to %f",EPS[1]))
+      verboseprint(cobra$verbose, important=FALSE,sprintf("reducing epsilon to %f",EPS))   # EPS[1]
       verboseprint(cobra$verbose, important=FALSE,sprintf("reducing equality margin to %f",currentEps))
       
       Cfeas <<- 0
@@ -341,7 +341,7 @@ cobraPhaseII <- function(cobra){
     if(Cinfeas>=Tinfeas){
       EPS <<- pmin(2*EPS,epsMax) 
       #currentEps <<- min(currentEps*(cobra$equHandle$inc),cobra$currentEps[1])
-      verboseprint(cobra$verbose, important=FALSE,sprintf("increasing epsilon to %f",EPS[1]))
+      verboseprint(cobra$verbose, important=FALSE,sprintf("increasing epsilon to %f",EPS))   # EPS[1]
       verboseprint(cobra$verbose, important=FALSE,sprintf("increasing equality margin to %f",currentEps))
       
       Cinfeas <<- 0
@@ -362,17 +362,18 @@ cobraPhaseII <- function(cobra){
   cobra$printP<-TRUE
   testit::assert("ev1 not initialized",attr(ev1,"state")=="initialized");
   # prior to entering while-loop, ev1 must have attribute state = "initialized"
+  
+  cobra$rs_obj = RandomStart$new(cobra)
 
   while(num < cobra$feval){
 
 
     ##########################################################
-    # STEP6.1: UPDATE RBF MODEL for fitness and constraints  #
+    # STEP6.1a: UPDATE RBF MODEL for fitness and constraints #
     ##########################################################
     gama<-cobra$XI[((globalOptCounter) %% length(cobra$XI))+1]#tempo
 
     if(cobra$MS$active && nrow(cobra$A) %% cobra$MS$freq==0){
-      
       cobra<-selectModel(models=cobra$MS$models,
                         widths=cobra$MS$widths,cobra=cobra,freq=cobra$MS$freq,
                         slidingW=cobra$MS$slidingW,WinS=cobra$MS$WinS,
@@ -381,10 +382,19 @@ cobraPhaseII <- function(cobra){
     }
     
     #as long as no transformation of the fitness function is done, the models are simply generated as follows. 
-     if(!cobra$TFlag) cobra <- trainSurrogates(cobra);  # side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
+    if(!cobra$TFlag) {
+      cobra <- trainSurrogates(cobra);  # side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
+    }
+    
+    #browser()
+    #print(cobra$xbest+1)
+    fp1 = interpRBF(cobra$xbest+1, cobra$fitnessSurrogate)
+    gp1 = interpRBF(cobra$xbest+1, cobra$constraintSurrogates)
      
 
-    #whitening transfomartion
+    ##########################################################
+    # STEP6.1b: whitening transformation = CA                #
+    ##########################################################
     if(cobra$CA$active && any(cobra$CA$ITER<=nrow(cobra$A))){
       cobra$TFlag<-T  #transformation flag
       VALIDTRANSORFMATION<-T
@@ -448,48 +458,48 @@ cobraPhaseII <- function(cobra){
     
       
       
-    #-----only debug purposes---------#
-    # realF is only used for diagnosis purposes and the real function calls are not stored in the archive    
-    # realF<-function(x){
-    #   y<-cobra$fnNOarchive(x)[1]
-    #   return(y)
-    # }   
-    #  print(hesse)
-      #print(numDeriv::grad(fitfunc,x=cobra$xbest))
-     #the visHess function plots the hessian matrix error
-     #deprecated
-     #if(cobra$CA$visHessianError) visHess(OHesse=hesse,cobra)
-    #-----only debug purposes---------#
+      #-----only debug purposes---------#
+      # realF is only used for diagnosis purposes and the real function calls are not stored in the archive    
+      # realF<-function(x){
+      #   y<-cobra$fnNOarchive(x)[1]
+      #   return(y)
+      # }   
+      #  print(hesse)
+      # print(numDeriv::grad(fitfunc,x=cobra$xbest))
+      # #the visHess function plots the hessian matrix error
+      # #deprecated
+      # #if(cobra$CA$visHessianError) visHess(OHesse=hesse,cobra)
+      #-----only debug purposes---------#
      
      
-     #Checking all the evaluated points to see if we can find a better solution
-     Xs<-get("ARCHIVE",envir=intern.archive.env)
-     Ys<-get("ARCHIVEY",envir=intern.archive.env)
-     bestInd<-which(Ys==min(Ys))[1]
-     XBEST<-Xs[bestInd,]
-     myGrad<-XBEST-cobra$xbest
-     #updating the best solution
-     cobra$xbest<-XBEST
-     cobra$xbest<- pmax(cobra$xbest,cobra$lower)   
-     cobra$xbest<- pmin(cobra$xbest,cobra$upper)
-     cobra$A[cobra$ibest,]<-cobra$xbest
-     cobra$Fres[cobra$ibest]<-Ys[bestInd]
-     cobra$fbest<-Ys[bestInd]
+      #Checking all the evaluated points to see if we can find a better solution
+      Xs<-get("ARCHIVE",envir=intern.archive.env)
+      Ys<-get("ARCHIVEY",envir=intern.archive.env)
+      bestInd<-which(Ys==min(Ys))[1]
+      XBEST<-Xs[bestInd,]
+      myGrad<-XBEST-cobra$xbest
+      #updating the best solution
+      cobra$xbest<-XBEST
+      cobra$xbest<- pmax(cobra$xbest,cobra$lower)   
+      cobra$xbest<- pmin(cobra$xbest,cobra$upper)
+      cobra$A[cobra$ibest,]<-cobra$xbest
+      cobra$Fres[cobra$ibest]<-Ys[bestInd]
+      cobra$fbest<-Ys[bestInd]
      
-     # re-evaluating the current points after applying the M transformation
-     # note that this step costs extra real function evaluations if cobra$CA$reEval=T
-     #if(cobra$CA$reEval)
-       AtoEval<-cobra$A
-     #else
-     #  AtoEval<-cobra$iA
+      # re-evaluating the current points after applying the M transformation
+      # note that this step costs extra real function evaluations if cobra$CA$reEval=T
+      #if(cobra$CA$reEval)
+        AtoEval<-cobra$A
+      #else
+      #  AtoEval<-cobra$iA
      
-     alpha<-cobra$CA$alpha
-     tCenter<-cobra$xbest+alpha*myGrad #transformation center
-     #popc<-sortPop(cobra$A,cobra$Fres)$pop
-     #tCenter<-apply(popc[c(1:2*cobra$dimension),],2,mean)+alpha*myGrad
-    # centerChange<-sqrt(sum((tCenter-cobra$tCenter)^2))
+      alpha<-cobra$CA$alpha
+      tCenter<-cobra$xbest+alpha*myGrad #transformation center
+      #popc<-sortPop(cobra$A,cobra$Fres)$pop
+      #tCenter<-apply(popc[c(1:2*cobra$dimension),],2,mean)+alpha*myGrad
+      # centerChange<-sqrt(sum((tCenter-cobra$tCenter)^2))
      
-     if(VALIDTRANSORFMATION ){
+      if(VALIDTRANSORFMATION ){
             cobra$tCenter<-tCenter
             newA<-AtoEval-t(replicate(nrow(AtoEval),tCenter))
             newA<-newA%*%cobra$TM
@@ -499,16 +509,17 @@ cobraPhaseII <- function(cobra){
       
         #cobra$TA<-sel$AtoEval
         #cobra$TFres<-sel$TFres
-       cobra <- trainSurrogates(cobra);# side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
-       #evalModel(nPoints=10000,model=cobra$fitnessSurrogate,dimension=cobra$dimension,fn=realF,Tr=cobra$TM,Tc=cobra$tCenter) 
-       #This function is deprecated and the R script is moved to the deprecated folder
-     }else{ #if the validtransformation!=T then we turn off the transfomarion flag and we generate normal surrogates
-       cobra <- trainSurrogates(cobra);# side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
+        cobra <- trainSurrogates(cobra);# side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
+        #evalModel(nPoints=10000,model=cobra$fitnessSurrogate,dimension=cobra$dimension,fn=realF,Tr=cobra$TM,Tc=cobra$tCenter) 
+        #This function is deprecated and the R script is moved to the deprecated folder
+      }else{ #if the validtransformation!=T then we turn off the transfomarion flag and we generate normal surrogates
+        cobra <- trainSurrogates(cobra);# side effect: cobra$constraintSurrogates, cobra$fitnessSurrogate
          
-     }
+      }
 
-
-    }#end of model generation by means of whitening
+    }# end of model generation by means of whitening
+    # =end of if(cobra$CA$active && ...)
+    ##########################################################
     
     
     ##########################################################
@@ -517,7 +528,7 @@ cobraPhaseII <- function(cobra){
     #why -nRepair? - globalOptCounter counts only real optimization steps
     #gama<-cobra$XI[((globalOptCounter-nRepair) %% length(cobra$XI))+1]  #/SB/ using a counter only for the global optimization excluding repair and trust region
     gama<-cobra$XI[((globalOptCounter) %% length(cobra$XI))+1]  #/SB/ using a counter only for the global optimization excluding repair and trust region
-    cobra$ro <- gama*cobra$l
+    cobra$ro <- gama*cobra$l      # cobra$l is set in line 236 & 607 of cobraInit.R (length of smallest side of search space)
     cobra$EPS<- EPS
     
     ##########################################################
@@ -530,7 +541,7 @@ cobraPhaseII <- function(cobra){
     
     #### /SB/-Random Start algorithm
     if(cobra$sac$RS){
-      cobra<-RandomStart(cobra)
+      cobra<-cobra$rs_obj$random_start(cobra)
       xStart<-cobra$xStart
       #if(any(cobra$xbest!=xStart)) cobra$noProgressCount<-0
     }else{
@@ -541,13 +552,13 @@ cobraPhaseII <- function(cobra){
     testit::assert("",all(xStart<=cobra$upper));
     cobra <- checkIfCobraOptimizable(cobra);
 
-  # browser()
-  cobra$gCOBRA_c <- function(x){  # inequality constraints for nloptr::cobyla
-    return(-gCOBRA(x,cobra))      # new convention h_i <= 0 
-  }
+    ### construct **now** cobra$gCOBRA_c from gCOBRA
+    cobra$gCOBRA_c <- function(x){  # inequality constraints for nloptr::cobyla
+      return(-gCOBRA(x,cobra))      # new convention h_i <= 0.
+    } # Note that gCOBRA (in innerFuncs.R) contains the distance requirement calculation.
     
-  #cat("Starting optimizer ...\n");
-  switch(cobra$seqOptimizer,
+    #cat("Starting optimizer ...\n");
+    switch(cobra$seqOptimizer,
            
          #RANDOMLHS={subMin<-RS(fun=subProb,lb=cobra$lower, ub=cobra$upper, n=cobra$seqFeval)},
          COBYLA={ subMin<-nloptr::cobyla(xStart,fn=subProb2,lower=cobra$lower,upper=cobra$upper,hin=cobra$gCOBRA_c,control=list(maxeval=cobra$seqFeval,xtol_rel=cobra$seqTol),cobra=cobra,deprecatedBehavior=FALSE); subMin$feval=subMin$iter },
@@ -565,7 +576,7 @@ cobraPhaseII <- function(cobra){
          #RANDOMSEARCH = { subMin <- randomSearch(cobra$xbest, fn=subProb2, lower=cobra$lower,upper=cobra$upper,control=list(maxfeval=cobra$seqFeval, sd=0.05))},
          ISRESCOBY = { subMin<-isresCobyla(xStart,fn=subProb2,hin=gCOBRA, cobra=cobra); subMin$feval=subMin$iter; cobra$nCobyla=subMin$nCobyla; cobra$nIsres=subMin$nIsres;},
          DEOPTIM={subMin<-DEoptim::DEoptim(fn=subProb,lower=cobra$lower,upper=cobra$upper,DEoptim::DEoptim.control(itermax=1000,trace=Inf,initialpop=xStart+matrix(runif(10*length(xStart)^2),nrow=10*length(xStart),ncol=length(xStart))), cobra=cobra); subMin$feval=subMin$optim$nfeval ; subMin$par=subMin$optim$bestmem;subMin$convergence=NA}
-  )
+    )
     optimTime <- (proc.time()-ptm)[3]
     verboseprint(cobra$verbose, important=FALSE,paste(" finished (",subMin$feval,"iterations,",optimTime,"sec )"))
     #cat("Optimization time for", subMin$feval, " iterations:", optimTime, "seconds\n")  
@@ -591,6 +602,8 @@ cobraPhaseII <- function(cobra){
     
     xNew<-subMin$par
     attr(ev1,"state") <- "optimized"
+    globalOptCounter<-globalOptCounter+1# this is a counter which counts all main iterates without repair or tr
+    cobra$fe<-cobra$fe+1   # never used
     
     ##########################################################
     # STEP6.4: Evaluate real functions                       #
@@ -599,17 +612,15 @@ cobraPhaseII <- function(cobra){
     # cobra$noProgressCount is increased unconditionally here, it will be later reset to 0, if it 
     # turns out that the current iteration was successful (produced a new xBest). If there are
     # unsuccessful iterations in a row, then cobra$noProgressCount counts them.
-    globalOptCounter<-globalOptCounter+1# this is a counter which counts all main iterates without repair or tr
-    cobra$fe<-cobra$fe+1
     #
     #evaluate xNew on the real functions + do refine step (if cobra$equHandle$active) 
     ev1 <- evalReal(cobra,ev1,xNew,subMin$value,subMin$feval,subMin$convergence,optimTime,currentEps)
     cobra$TFres<-c(cobra$TFres,ev1$xNewEvalT[1])
     #calculate the p-Effect
-    if((nrow(cobra$A)%%cobra$sac$onlineFreqPLOG==0 && cobra$sac$onlinePLOG) || nrow(cobra$A)==cobra$initDesPoints){
+    #if((nrow(cobra$A)%%cobra$sac$onlineFreqPLOG==0 && cobra$sac$onlinePLOG) || nrow(cobra$A)==cobra$initDesPoints){
       cobra<-calcPEffect(cobra,ev1$xNew,ev1$xNewEval) 
-    }
-    
+    #}
+
     
     ##########################################################
     # STEP6.5 & 6.6: Update Information and Counters         #

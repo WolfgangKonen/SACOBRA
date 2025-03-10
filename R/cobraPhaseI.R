@@ -131,14 +131,13 @@ cobraPhaseI <- function(cobra){
     cobra$Gres <- as.matrix(cobra$Gres)
     cobra$constraintSurrogates <- trainCubicRBF(cobra$A,cobra$Gres,ptail=cobra$ptail,squares=cobra$squares)
     cobra$fitnessSurrogate <- trainCubicRBF(cobra$A,cobra$Fres,ptail=cobra$ptail,squares=cobra$squares)
-    
 
     ################################################
     # STEP4.2:Determine distance requirement(XI) #
     ################################################
     
     gama<-cobra$XI[(nrow(cobra$A) %% length(cobra$XI))+1]     
-    cobra$ro<-gama*cobra$l
+    cobra$ro<-gama*cobra$l   # cobra$l is set in line 236 & 607 of cobraInit.R (length of smallest side of search space)
     
     ################################################
     # STEP4.3: select next point                   #

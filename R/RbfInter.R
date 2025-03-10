@@ -153,14 +153,14 @@ trainRBF<-function(phi,U,ptail,squares,xp,type,DEBUG2,width=NA,rho=0){
 #' @param U       vector of length n, containing samples \eqn{f(x_i)} of 
 #'                the scalar function \eqn{f} to be fitted \cr
 #'                - or - \cr
-#'                (n x m) matrix, where each column 1,...,m contains one vector of samples
-#'                \eqn{f_j(x_i)} for the m'th model, j=1,...,m
+#'                (n x m) matrix, where each column j contains one vector of samples
+#'                \eqn{f_j(x_i)} for the j-th model, j=1,...,m
 #' @param squares [FALSE] flag, see description
 #' @param ptail   [TRUE] flag, see description
 #' @param rho     [0.0] experimental: 0: interpolating, >0, approximating (spline-like) 
 #'                Gaussian RBFs
 #' @param DEBUG2  [FALSE] if TRUE, save \code{M} and \code{rhs} on return value
-#' @param width   [NA] non relevant for the parameter-free cubic RBF              
+#' @param width   [NA] not relevant for the parameter-free cubic RBF              
 #'                
 #' @return \code{rbf.model},  an object of class \code{RBFinter}, which is basically a list 
 #' with elements:
@@ -439,7 +439,7 @@ trainMQRBF <- function(xp, U, ptail=TRUE, squares=FALSE,
 
 
 #----------------------------------------------------------------------------------
-#' Apply the trained cubic, MQ or Gaussian RBF interpolation to new data for d>1.
+#' Apply cubic or MQ or Gaussian RBF interpolation to single data point for d>1.
 #' 
 #' @param x         vector holding a point of dimension d
 #' @param rbf.model trained RBF model (or set of models), see \code{\link{trainCubicRBF}} 
@@ -457,7 +457,7 @@ interpRBF <- function(x,rbf.model) {
   testit::assert("rbf.model is not of class RBFinter",any(class(rbf.model)=="RBFinter"))
   if (length(x)!=ncol(rbf.model$xp)) {
     cat("problem in interpRBF\n")
-    #browser()
+    browser()
     stop("Problem in interpRBF")
   }
   ed = distLine(x,rbf.model$xp)# euclidean distance of x to all rbf.model$xp, 

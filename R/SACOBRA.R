@@ -250,55 +250,97 @@ getFbest <- function(cobra) {
 
 #
 #
-#' Random start Algorithm
+#' Random start algorithm
 #'
-#' Return a cobra object with cobra$xStart adjusted
+#' RandomStart is now an R6 class (to have private storage for reproducible RNG my_rng2).
+#' Its main member function is random_start, which returns a cobra object with cobra$xStart adjusted
 #'
 #' @param cobra an object of class COBRA (see  \code{\link{cobraInit}})
 #' 
 #' @return \code{cobra}, an object of class COBRA from \code{\link{cobraInit}}, with modified elements
 #'      \item{\code{xStart}}{ new starting point, either random or \code{cobra$xBest} }
 #'      \item{\code{noProgressCount}}{  number of consecutive iterations without a progress. 
-#'                                      Set to 0, if a random start point is choosen. }
+#'                                      Set to 0, if a random start point is chosen. }
 #' @keywords internal                                     
 #' 
-RandomStart<-function(cobra){
-  anewrand<-runif(1,min=0,max=1)
-  
- # randomnessTemp<-(9*0.3/20)*tanh(-(nrow(cobra$A)-(cobra$initDesPoints+15)))+11*0.3/20
-  feasibleRate<-length(which(cobra$numViol==0))/length(cobra$numViol) #fraction of feasible point in the population
-  diff<-cobra$sac$RSmax-cobra$sac$RSmin 
-  
- if((cobra$sac$RSAUTO==TRUE) && (feasibleRate <0.05)){
-   integ<-0.8
-   }else{
-     integ<-cobra$sac$RSmax+cobra$sac$RSmin  # default: 0.35
-   }
-  
-  
- switch(cobra$sac$RStype,
-        SIGMOID =  randomnessTemp<-(diff/2)*tanh(-(nrow(cobra$A)-(cobra$initDesPoints+15)))+(diff/2)+cobra$sac$RSmin,
-        CONSTANT= randomnessTemp<-integ/2
-)
-  if(cobra$DEBUG_RS)cat(paste("randomness=",randomnessTemp,"Feasibility Rate=",feasibleRate," \n"))
-
-  if( (anewrand< randomnessTemp)  || (cobra$noProgressCount >= cobra$sac$Cs)){   # /WK/ ???
-  #if( (anewrand< randomnessTemp)  && (cobra$noProgressCount >= cobra$sac$Cs)){   # /WK/ 
-    verboseprint(cobra$verbose, important=FALSE,"Starting the internal optimizer with a random point in the space")
-    #cat(sprintf("RS: iter=%03d, noProgressCount=%03d\n",nrow(cobra$A)+1,cobra$noProgressCount))
-    xStart<-runif(n=length(cobra$xbest),min=cobra$lower,max=cobra$upper)
-    #browser()
-    cobra$RSDONE<-c(cobra$RSDONE,"RS")
-   #cobra$noProgressCount<-0
-  } else{
-    xStart<-cobra$xbest
-    cobra$RSDONE<-c(cobra$RSDONE,"COBY")
-    
-  }
-  cobra$xStart<-xStart
-  return(cobra)
-}
-
+RandomStart<-R6::R6Class("RS",
+                         public=list(
+                           random_start=NA,
+                           my_rng2=NA,
+                           val=NA,
+                           initialize=function(cobra){
+                             # private$callRS(cobra)
+                             self$val = cobra$cobraSeed
+                             self$my_rng2=function(n, d, lower, upper) {
+                               MOD = 10**5+7
+                               OFS = 10**5-7
+                               x = matrix(0,n,d)     # an (n x d) matrix with zeros
+                               for (n_ in 1:n) {
+                                 for (d_ in 1:d) {
+                                   self$val <- (self$val*self$val*sqrt(self$val)+OFS) %% MOD    # avoid cycles (!)
+                                   x[n_,d_] = self$val/MOD*(upper[d_]-lower[d_]) + lower[d_]    # map val to range [lower, upper[
+                                 }
+                               }
+                               #browser()
+                               return(x)
+                             } # self$my_rng2
+                             self$random_start = function(cobra){
+                               anewrand = ifelse(cobra$sac$RS_rep, 
+                                                 self$my_rng2(1,1,c(0),c(1)), 
+                                                 runif(1,min=0,max=1))
+                               # p_restart<-(9*0.3/20)*tanh(-(nrow(cobra$A)-(cobra$initDesPoints+15)))+11*0.3/20
+                               feasibleRate<-length(which(cobra$numViol==0))/length(cobra$numViol) #fraction of feasible points in the population
+                               diff<-cobra$sac$RSmax-cobra$sac$RSmin 
+                               
+                               if((cobra$sac$RSAUTO==TRUE) && (feasibleRate <0.05)){
+                                 p_const <- 0.4
+                               }else{
+                                 p_const <- (cobra$sac$RSmax+cobra$sac$RSmin)/2  #  i.e. = 0.175
+                               }
+                               
+                               switch(cobra$sac$RStype,
+                                      SIGMOID = p_restart <- (diff/2)*tanh(-(nrow(cobra$A)-(cobra$initDesPoints+15)))+(diff/2)+cobra$sac$RSmin,
+                                      CONSTANT= p_restart <- p_const
+                               )
+                               # print(p_restart)
+                               # The SIGMOID case:
+                               #   - if the argument of tanh is negative and big, then p_restart -> RSmin
+                               #   - if the argument of tanh is positive and big, then p_restart -> RSmax
+                               # The argument of tanh is positive and big in the early iterations and negative and big in the late iterations
+                               if(cobra$DEBUG_RS)
+                                 cat(paste("randomness=",p_restart,"Feasibility Rate=",feasibleRate," \n"))
+                               
+                               if( (anewrand< p_restart)  || (cobra$noProgressCount >= cobra$sac$RS_Cs)){   # /WK/ ???
+                                 #if( (anewrand< p_restart)  && (cobra$noProgressCount >= cobra$sac$RS_Cs)){   # /WK/ 
+                                 verboseprint(cobra$verbose, important=FALSE,"Starting the internal optimizer with a random point in the space")
+                                 #cat(sprintf("RS: iter=%03d, noProgressCount=%03d\n",nrow(cobra$A)+1,cobra$noProgressCount))
+                                 if (cobra$sac$RS_rep==T) {
+                                   xStart<-self$my_rng2(1,length(cobra$xbest),cobra$lower,cobra$upper)
+                                   xStart<- as.vector(xStart)
+                                 } else {
+                                   xStart<-runif(n=length(cobra$xbest),min=cobra$lower,max=cobra$upper)
+                                 }
+                                 print(sprintf("[random_start] (%9.5f,%9.5f) at iter %d", xStart[1], xStart[2], nrow(cobra$A)))
+                                 cobra$RSDONE<-c(cobra$RSDONE,"RS")
+                                 #cobra$noProgressCount<-0
+                               } else{
+                                 xStart<-cobra$xbest
+                                 cobra$RSDONE<-c(cobra$RSDONE,"COBY")
+                                 
+                               }
+                               cobra$xStart<-xStart
+                               return(cobra)
+                               
+                             } # self$randomStart
+                           }
+                         ),  # public
+                         private=list(
+                           callRS=function(cobra){
+                           } 
+                         ) # private
+                         
+) # R6class
+                                     
 
 #Adjust DRC
 #
@@ -321,12 +363,11 @@ detLen <-function(x){
   minL<-min(x)
   return(maxL-minL)
 }
-#Adjust Constraint functions
+#Adjust constraint functions
 #
 adCon<-function(cobra){
   
   fnold<-cobra$fn
-  
   testit::assert("[adCon] cobra$Gres contains NA elements", any(is.na(cobra$Gres))==FALSE)
   
   GRL<-apply(cobra$Gres,2,detLen)
@@ -340,7 +381,7 @@ adCon<-function(cobra){
  if(GR > cobra$sac$TGR){
     cat(sprintf("Normalizing Constraint Functions \n"))
     GRfact<-c(1,GRL*(1/mean(GRL)))
-    #finding the normalizing coeffecient of the equality constraints
+    #finding the normalizing coefficient of the equality constraints
     if(length(cobra$equIndex)!=0){
       GRF<-GRfact[-1]
       EQUfact<-GRF[cobra$equIndex]
@@ -350,8 +391,6 @@ adCon<-function(cobra){
       cobra$equHandle$equEpsFinal<-finMarginCoef*equEpsFinal
       cobra$GRfact<-GRF
       cobra$finMarginCoef<-finMarginCoef
-      #browser()
-      
     }
 
     fn<-function(x){
@@ -363,10 +402,12 @@ adCon<-function(cobra){
     for(i in 1:nrow(cobra$Gres)){
       Gres<-rbind(Gres,cobra$Gres[i,]/GRfact[-1])
     }
+    # browser()
+    
     cobra$Gres<-Gres
     
   }
-  detLen2 <-function(x){
+  detLen2 <-function(x){      # never used
     maxL<-quantile(x,c(0.9))
     minL<-quantile(x,c(0.1))
     return((maxL-minL)/2)
@@ -379,10 +420,11 @@ adCon<-function(cobra){
 
 #Adjust Fitness Function
 #
-# Note that the fitness function cobra$fn is not changed by this function. Instead, all results
-# found in cobra$Fres are transformed with transfFunc and the transformed results are saved 
-# on cobra$SurrogateInput. This is then used to train a new surrogate model for the fitness 
-# function and use this model in the sequential optimizer.
+# Note that the fitness function cobra$fn is not changed by this function. Nor is cobra$Fres
+# changed. Instead, all results found in cobra$Fres are either copied to cobra$SurrogateInput
+# or they are transformed with transfFunc and the transformed results are copied to cobra$SurrogateInput. 
+# cobra$SurrogateInput is then used to train a new surrogate model for the fitness 
+# function and this surrogate model is used in the sequential optimizer.
 #
 adFit<-function(cobra,ind){
   maxF=max(cobra$Fres)
@@ -394,8 +436,9 @@ adFit<-function(cobra,ind){
     return(y)
   }
   
-  #If cobra$online PLOG is true then the decision to do the plog transfomation or not 
-  #is being made in every iteration according to the p-effect otherwise the decision is made once accoridng to the FRange value 
+  #If cobra$onlinePLOG is true, the decision to do the plog transfomation or not 
+  #is made in every iteration according to the p-effect. 
+  # Otherwise the decision is made once according to the FRange value 
   if(cobra$sac$onlinePLOG){
     pShift<-0
     #decision making according to p-effect
@@ -431,12 +474,12 @@ adFit<-function(cobra,ind){
         pShift<- 0
       }
       Fres<-sapply(cobra$Fres[ind],transfFunc,pShift=pShift)
-      cobra$PLOG<-TRUE
+      cobra$PLOG<-c(cobra$PLOG,TRUE)
       
     }else{
       Fres<-cobra$Fres[ind]
       pShift<-NA
-      cobra$PLOG<-FALSE
+      cobra$PLOG<-c(cobra$PLOG,FALSE)
       
     } 
   }
@@ -455,7 +498,7 @@ adFit<-function(cobra,ind){
 #' Monotonic transform
 #' 
 #' The function is introduced in [Regis 2014] and extended here by a parameter \eqn{p_{shift}}.
-#' It is used to squash functions with a large range into a smalller range.\cr
+#' It is used to squash functions with a large range into a smaller range.\cr
 #' Let \eqn{y' = (y-p_{shift})}: 
 #'  \deqn{ plog(y) =  \ln(1+ y'), \quad\mbox{if}\quad y' \ge 0 } 
 #'  \deqn{ plog(y) = -\ln(1- y'), \quad\mbox{if}\quad y'  <   0 } 
@@ -494,6 +537,7 @@ plogReverse<-function(y,pShift=0){
   return(ret)
 }
 
+# changes cobra$err1, cobra$err2, cobra$pEffect
 calcPEffect<-function(cobra,xNew,xNewEval){
   #browser()
   newPredY1 <- getPredY1(xNew,cobra$fitnessSurrogate1,cobra)
@@ -508,7 +552,7 @@ calcPEffect<-function(cobra,xNew,xNewEval){
   #err1<-c(err1,newErr1)
   #err2<-c(err2,newErr2)
   errRatio<-err1/err2
-  
+
   if(is.infinite(newErr2)){
     errRatio[length(errRatio)]<-0 
   }else if(is.infinite(newErr1)){

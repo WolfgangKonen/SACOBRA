@@ -57,7 +57,7 @@
 #'                      in \code{\link[dfoptim]{nmkb}} or param \code{control$xtol_rel} 
 #'                      in \code{\link[nloptr]{cobyla}}
 #' @param ptail         [TRUE] TRUE: with, FALSE: without polynomial tail in \code{trainRBF}
-#' @param squares      [TRUE] set to TRUE for including the second order polynomials in building the fitness and constraint surrogates in \code{trainRBF}
+#' @param squares       [TRUE] set to TRUE for including the second order polynomials in building the fitness and constraint surrogates in \code{trainRBF}
 #' @param XI            [DRCL] magic parameters for the distance requirement cycle (DRC)
 #' @param epsilonInit   [NULL] initial constant added to each constraint to maintain a certain margin to boundary
 #' @param epsilonMax    [NULL] maximum for constant added to each constraint 
@@ -173,10 +173,11 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
                       initDesPoints=2*length(xStart)+1, initDesOptP=NULL, initBias=0.005,
                       skipPhaseI=TRUE,
                       seqOptimizer="COBYLA", seqFeval=1000, seqTol=1e-6, 
-                      ptail=TRUE, squares=TRUE, conTol=0.0,
                       DOSAC=1, sac=defaultSAC(DOSAC), 
                       repairInfeas=FALSE, ri=defaultRI(),
-                      RBFmodel="cubic", RBFwidth=-1,GaussRule="One",widthFactor=1.0,RBFrho=0.0,MS=defaultMS(),
+                      RBFmodel="cubic", RBFwidth=-1,GaussRule="One",widthFactor=1.0,RBFrho=0.0,
+                      ptail=TRUE, squares=TRUE, conTol=0.0,
+                      MS=defaultMS(),
                       equHandle=defaultEquMu(),
                       rescale=TRUE,newlower=-1,newupper=1,  
                       XI=DRCL, 
@@ -222,7 +223,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   xStartEval<-fn(xStart)
   nConstraints<-length(xStartEval)-1
   CONSTRAINED <- ifelse(nConstraints==0, FALSE, TRUE)
-  assert("This version does not support conditioning analysis for constrained problems ",!CONSTRAINED || !conditioningAnalysis$active)
+  testit::assert("This version does not support conditioning analysis for constrained problems ",!CONSTRAINED || !conditioningAnalysis$active)
   if(!CONSTRAINED)testit::assert("cobraInit: This version does not support trust Region functionality for unconstrained Problems", !TrustRegion )
   
   # old version
@@ -233,7 +234,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   if(!CONSTRAINED)verboseprint(verbose=verbose, important=TRUE,"An unconstrained problem is being addressed")
   
   l <- min(upper - lower) # length of smallest side of search space
-  if (is.null(epsilonInit)) epsilonInit<- 0.005*l
+  if (is.null(epsilonInit)) epsilonInit <- 0.005*l
   if (is.null(epsilonMax))  epsilonMax <- 2*0.005*l
   if (is.null(initDesOptP)) initDesOptP <- initDesPoints
   
@@ -288,6 +289,37 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
     return(I)    
   }
   
+  # create reproducible 'random' numbers on the Python and R side
+  # CAUTION: cycles might occur for n>100 (!!)
+  my_rng <- function(n, d, lower, upper, seed) {
+    MOD = 10**5+7
+    val = seed
+    x = matrix(0,n,d)     # an (n x d) matrix with zeros
+    for (n_ in 1:n) {
+      for (d_ in 1:d) {
+        val = (val*val) %% MOD
+        x[n_,d_] = val/MOD*(upper[d_]-lower[d_]) + lower[d_]    # map val to range [lower, upper[
+      }
+    }
+    return(x)
+  }
+  
+  # create reproducible 'random' numbers on the Python and R side
+  # (seems to be cycle-free, tested for nobs=500)
+  my_rng2 <- function(n, d, lower, upper, seed) {
+    MOD = 10**5+7
+    OFS = 10**5-7
+    val = seed
+    x = matrix(0,n,d)     # an (n x d) matrix with zeros
+    for (n_ in 1:n) {
+      for (d_ in 1:d) {
+        val = (val*val*sqrt(val)+OFS) %% MOD    # avoid cycles (!)
+        x[n_,d_] = val/MOD*(upper[d_]-lower[d_]) + lower[d_]    # map val to range [lower, upper[
+      }
+    }
+    return(x)
+  }
+  
   cat("\n")
   sw=switch(initDesign,
          "RANDOM" = {
@@ -300,9 +332,53 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
            
            randomResults<-randomResultsFactory(I,fn,dimension)
            # update structures for random solutions
+           if(nConstraints==0){   #WK: adapt code to address unconstrained problems
+             Gres<-NULL
+             Fres <- as.vector(randomResults)                                                          
+             
+           }else{
+             Gres <- matrix(t(randomResults[-1,]),ncol=nConstraints,nrow=initDesPoints) #Changed to be adapted to case of having 1 constraint
+             colnames(Gres)<-rownames(randomResults)[-1]
+             Fres <- as.vector(randomResults[1,])                                                          
+           }
+           names(Fres) <- NULL
+           colnames(I)=NULL
+           rownames(I)=NULL
+           "ok"
+         },
+         
+         "RAND_R" = {
+           I <- as.matrix(my_rng(initDesPoints-1, dimension, lower, upper, cobraSeed))    
+           
+           I <- rbind(I,xStart)
+           I <- clipLowerUpper(I,dimension)
+           
+           randomResults<-randomResultsFactory(I,fn,dimension)
            # update structures for random solutions
-           #WK: In order to adapt the code to address unconstraint problems
-           if(nConstraints==0){
+           if(nConstraints==0){   #WK: adapt code to address unconstrained problems
+             Gres<-NULL
+             Fres <- as.vector(randomResults)                                                          
+             
+           }else{
+             Gres <- matrix(t(randomResults[-1,]),ncol=nConstraints,nrow=initDesPoints) #Changed to be adapted to case of having 1 constraint
+             colnames(Gres)<-rownames(randomResults)[-1]
+             Fres <- as.vector(randomResults[1,])                                                          
+           }
+           names(Fres) <- NULL
+           colnames(I)=NULL
+           rownames(I)=NULL
+           "ok"
+         },
+         
+         "RAND_REP" = {
+           I <- as.matrix(my_rng2(initDesPoints-1, dimension, lower, upper, cobraSeed))    
+           
+           I <- rbind(I,xStart)
+           I <- clipLowerUpper(I,dimension)
+           
+           randomResults<-randomResultsFactory(I,fn,dimension)
+           # update structures for random solutions
+           if(nConstraints==0){   #WK: adapt code to address unconstrained problems
              Gres<-NULL
              Fres <- as.vector(randomResults)                                                          
              
@@ -329,8 +405,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
 
            randomResults<-randomResultsFactory(I,fn,dimension)
            # update structures for random solutions
-           #SB: In order to adapt the code to address unconstraint problems
-           if(nConstraints==0){
+           if(nConstraints==0){   #SB: adapt code to address unconstrained problems
              Gres<-NULL
              Fres <- as.vector(randomResults)                                                          
              
@@ -353,7 +428,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
            
            randomResults<-randomResultsFactory(I,fn,dimension)
            # update structures for random solutions
-           #WK: In order to adapt the code to address unconstraint problems
+           #WK: In order to adapt the code to address unconstrained problems
            if(nConstraints==0){
              Gres<-NULL
              Fres <- as.vector(randomResults)                                                          
@@ -376,7 +451,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
            
            randomResults<-randomResultsFactory(I,fn,dimension)
            # update structures for random solutions
-           #WK: In order to adapt the code to address unconstraint problems
+           #WK: In order to adapt the code to address unconstrained problems
            if(nConstraints==0){
              Gres<-NULL
              Fres <- as.vector(randomResults)                                                          
@@ -478,7 +553,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
                 I <- clipLowerUpper(I,dimension)
                 randomResults<-randomResultsFactory(I,fn,dimension)
                 # update structures for random solutions
-                #WK: In order to adapt the code to address unconstraint problems
+                #WK: In order to adapt the code to address unconstrained problems
                 if(nConstraints==0){
                   Gres<-NULL
                   Fres <- as.vector(randomResults)                                                          
@@ -507,7 +582,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   #teta<-teta   #distance requirement phaseI
   XI<-XI #c(0.01, 0.001, 0.0005)      #distance requirement phaseII
   
-  Tfeas<-floor(2*sqrt(dimension) )  # The threshhold parameter for the number of consecutive iterations that yield feasible solution before the margin is reduced
+  Tfeas<-floor(2*sqrt(dimension) )  # The threshold parameter for the number of consecutive iterations that yield feasible solution before the margin is reduced
   Tinfeas<-floor(2*sqrt(dimension)) # The threshold parameter for the number of consecutive iterations that yield infeasible solutions before the margin is increased
   Nmax<-feval
   
@@ -529,8 +604,8 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   # }
   
   
-  A<-I  # A contains all evaluated points
-  n<-nrow(A)
+  A <- I  # A contains all evaluated points
+  n <- nrow(A)
   cobra<-list(fn=fn,
               fnNOarchive=fnNOarchive,
             xStart=xbest,
@@ -569,7 +644,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
             conTol=conTol,
             constraintHandling=constraintHandling,
             equHandle=equHandle,
-            l=l, 
+            l=l,       # length of smallest side of search space
             repairInfeas=repairInfeas,
             fe=fe,
             ri=ri,
@@ -651,8 +726,9 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
     }
     
     # --- adFit is now called in *each* iteration of cobraPhaseII (adaptive plog) ---
+    
     cobra$GRfact<-1
-    cobra$finMarginCoef<-1
+    cobra$finMarginCoef<-1  # also set in SACOBRA.R, used in modifyEquCons.R
     if(cobra$sac$aCF && nConstraints!=0 ){
       verboseprint(cobra$verbose,important=FALSE,"adjusting constraint functions")
       cobra<-adCon(cobra)
@@ -665,8 +741,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   
   
   
-  
-  numViol<-sapply(1:initDesPoints , function(i){ # number of initial Constraint violations
+  numViol<-sapply(1:initDesPoints , function(i){ # number of initial constraint violations
     return(sum(cobra$Gres[i,]>0))
   })
   maxViol<-sapply(1:initDesPoints , function(i){
@@ -710,7 +785,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
     numViol<-sapply(1:initDesPoints , function(i){ # number of initial Constraint violations
       return(sum(tempG[i,]-currentEps>0))
     })
-  }
+  } # else if(equHandle$active)
   
 
   

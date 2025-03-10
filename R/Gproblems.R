@@ -34,7 +34,7 @@
 #' cobra <- cobraInit(xStart=G24$lower, fName=G24$name, fn=G24$fn, 
 #'                    lower=G24$lower, upper=G24$upper, feval=25)
 #'                    
-#' ## Run sacobra optimizer
+#' ## Run SACOBRA optimizer
 #' cobra <- cobraPhaseII(cobra)
 #' 
 #' ## The true solution is at solu = G24$solu
@@ -52,7 +52,7 @@
 #' cobra <- cobraInit(xStart=G03$lower, fn=G03$fn, fName=G03$name, 
 #'                    lower=G03$lower, upper=G03$upper, feval=40)
 #'                    
-#' ## Run sacobra optimizer
+#' ## Run SACOBRA optimizer
 #' cobra <- cobraPhaseII(cobra)
 #' 
 #' ## The true solution is at solu = G24$solu
