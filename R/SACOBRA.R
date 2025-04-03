@@ -285,6 +285,7 @@ RandomStart<-R6::R6Class("RS",
                                return(x)
                              } # self$my_rng2
                              self$random_start = function(cobra){
+                               testit::assert("cobra$sac$RS_rep is NULL!", !is.null(cobra$sac$RS_rep))
                                anewrand = ifelse(cobra$sac$RS_rep, 
                                                  self$my_rng2(1,1,c(0),c(1)), 
                                                  runif(1,min=0,max=1))

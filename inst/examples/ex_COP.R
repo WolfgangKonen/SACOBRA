@@ -1,22 +1,26 @@
-solve_G24 <- function() {
-  ##creating an instance for G24 problem 
-  G24<-COP$new("G24")
+solve_G05 <- function(cobraSeed) {
+  ## creating an instance for G05 
+  G05<-COP$new("G05")
   
-  ##initializing SACOBRA 
-  cobra <- cobraInit(xStart=G24$lower, fName=G24$name, 
-                     fn=G24$fn, lower=G24$lower, upper=G24$upper, feval=25)
-  
+  ## Initializing SACOBRA  
+  cobra <- cobraInit(xStart=G05$xStart, fn=G05$fn, fName=G05$name, 
+                     lower=G05$lower, upper=G05$upper, feval=70,
+                     solu=as.vector(G05$solu),   
+                     initDesign = "LHS", cobraSeed=cobraSeed)
+  cobra$squares = T
+  # browser()
+
   ## Run SACOBRA optimizer 
   cobra <- cobraPhaseII(cobra)
   
-  ## The true solution is at G24$solu = c(2.329520, 3.178493) 
-  ## with objective -5.508013
+  ## The true solution is at G05$solu = c(679.9453175, 1026.0671351, 0.1188764, -0.3962336)
+  ## with objective 5126.498 
   ## The solution found by SACOBRA:
-  print(getXbest(cobra))          # 2.329725 3.176549
-  print(getFbest(cobra))          # -5.506275
-  cobra$errGCOP = abs(cobra$df$Best-G24$fn(G24$solu)[1])
+  print(getXbest(cobra))          # 679.9380064 1026.0749485 0.1188816 -0.3962311
+  print(getFbest(cobra))          # 5126.498 
+  cobra$errGCOP = abs(cobra$df$Best-G05$fn(G05$solu)[1])
   plot(cobra$errGCOP,log="y",type="l",
-       ylab="error",xlab="iteration",main=G24$name)
+       ylab="error",xlab="iteration",main=G05$name)
   return (cobra)
 }
 
@@ -27,12 +31,13 @@ solve_G06 <- function(cobraSeed) {
   ## Initializing SACOBRA  
   cobra <- cobraInit(xStart=G06$xStart, fn=G06$fn, fName=G06$name, 
                      lower=G06$lower, upper=G06$upper, feval=40,
-                     initDesign = "RAND_REP", cobraSeed=cobraSeed)
+                     solu=as.vector(G06$solu),   
+                     initDesign = "LHS", cobraSeed=cobraSeed)
   cobra$squares = F
   # browser()
   cobra$sac$RS = T    # temporarily, to check equivalence to Python side
   cobra$sac$RS_rep = T
-
+  
   ## Run SACOBRA optimizer 
   cobra <- cobraPhaseII(cobra)
   
@@ -64,7 +69,31 @@ multi_G06 <- function(runs, cobraSeed) {
   return (cobra)
 }
 
-# cobra = solve_G24()
-cobra = solve_G06(42)
+solve_G24 <- function() {
+  ##creating an instance for G24 problem 
+  G24<-COP$new("G24")
+  
+  ##initializing SACOBRA 
+  cobra <- cobraInit(xStart=G24$lower, fName=G24$name, 
+                     solu=as.vector(G24$solu),   
+                     fn=G24$fn, lower=G24$lower, upper=G24$upper, feval=25)
+
+  ## Run SACOBRA optimizer 
+  cobra <- cobraPhaseII(cobra)
+  
+  ## The true solution is at G24$solu = c(2.329520, 3.178493) 
+  ## with objective -5.508013
+  ## The solution found by SACOBRA:
+  print(getXbest(cobra))          # 2.329725 3.176549
+  print(getFbest(cobra))          # -5.506275
+  cobra$errGCOP = abs(cobra$df$Best-G24$fn(G24$solu)[1])
+  plot(cobra$errGCOP,log="y",type="l",
+       ylab="error",xlab="iteration",main=G24$name)
+  return (cobra)
+}
+
+cobra = solve_G05(42)
+# cobra = solve_G06(42)
 # cobra = multi_G06(10, 390)
+# cobra = solve_G24()
 

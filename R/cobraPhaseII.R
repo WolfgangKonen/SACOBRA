@@ -144,7 +144,8 @@ cobraPhaseII <- function(cobra){
     if(cobra$nConstraints!=0){
       ev1$predC = matrix(nrow=cobra$initDesPoints,ncol=cobra$nConstraints) # matrix to store predicted constraint values
       colnames(ev1$predC) <- paste("C",1:cobra$nConstraints,sep="") 
-      ev1$feas <- sapply(1:nrow(cobra$Gres), FUN = function(i) !any(cobra$Gres[i,]>0)) # feasibility of initial design      
+      ev1$feas <- sapply(1:nrow(cobra$Gres), FUN = function(i) !any(cobra$Gres[i,]>cobra$conTol)) # feasibility of initial design  
+                                                                                  # /WK/2025/03: bug fix: was '>0' before    
     }
     
     ev1$feasPred <- rep(NA,cobra$initDesPoints)
@@ -207,6 +208,11 @@ cobraPhaseII <- function(cobra){
   
   ### --- should later go into innerFuncs, but think about EPS and ro and fn
   
+  # return 
+  #     val = objective + gamma * penalty
+  # where
+  #     penalty = sum(constr violations) + sigma_D * distRequirement
+  #
   fitFuncPenalRBF <- function(x) { 
     if(any(is.nan(x))){
       warning("fitFuncPenalRBF: x value is NaN, returning Inf")
@@ -219,7 +225,7 @@ cobraPhaseII <- function(cobra){
     if(cobra$CONSTRAINED){
       constraintPrediction <-  interpRBF(x,cobra$constraintSurrogates) +EPS^2
       if (cobra$trueFuncForSurrogates) constraintPrediction <-  fn(x)[-1]+EPS^2
-      violatedConstraints = which(constraintPrediction>0)
+      violatedConstraints = which(constraintPrediction>cobra$conTol)    # /WK/2025/03/23: was ">0" before
       penalty = sum(constraintPrediction[violatedConstraints]) 
     }
     
@@ -242,7 +248,7 @@ cobraPhaseII <- function(cobra){
   # If not, increase sigmaD[1]. Return sigmaD.
   # 
   checkDistanceReq <- function(subMin,fitnessSurrogate,ro,sigmaD,CHECKDIST) {
-    if (CHECKDIST) {
+    if (CHECKDIST) {     # currently always =T
       sumViol = distRequirement(subMin$par,fitnessSurrogate,ro)$sumViol
       if (sumViol>0) {
         #
@@ -262,7 +268,7 @@ cobraPhaseII <- function(cobra){
   # update cobra information (A, Fres, Gres and others)
   # update counters Cfeas, Cinfeas on the global level of cobraPhaseII
   #
-  updateInfoAndCounters <- function(cobra,xNew,xNewEval,newNumViol,
+  updateInfoAndCounters <- function(cobra,xNew,xNewEval,newNumViol,trueNumViol,
                                     newMaxViol,trueMaxViol,phase,currentEps)
   {
     cobra$A<-rbind(cobra$A,xNew)
@@ -272,6 +278,7 @@ cobraPhaseII <- function(cobra){
     cobra$Gres = rbind(cobra$Gres,xNewEval[-1])
     cobra$currentEps<-c(cobra$currentEps,currentEps)
     cobra$numViol<-c(cobra$numViol,newNumViol)
+    cobra$trueNumViol<-c(cobra$trueNumViol,trueNumViol)
     cobra$maxViol<-c(cobra$maxViol,newMaxViol)
     cobra$trueMaxViol<-c(cobra$trueMaxViol,trueMaxViol)
 
@@ -292,23 +299,7 @@ cobraPhaseII <- function(cobra){
                   , phase ,nrow(cobra$A), cobra$A[xNewIndex,1] , xNewEval[1] , newMaxViol,currentEps)))
     #verboseprint(cobra$verbose, important=DEBUGequ,(sprintf("%s.[%d]: %f %f | %f | %f|[%f]" 
     #              , phase ,nrow(cobra$A), cobra$A[xNewIndex,1] ,cobra$A[xNewIndex,2] , xNewEval[1] , newMaxViol,currentEps)))
-    #SB: I added another print line which prints the best found solution after several iterations, if we do not have any interest for this the following lines can be commented
-    realXbest<-inverseRescale(cobra$xbest,cobra)
-    #realXbest<-sapply(1:length(cobra$xbest) , function(i){scales::rescale(cobra$xbest[i],from=c(cobra$newlower,cobra$newupper),to=c(cobra$lower[i],cobra$upper[i]))})
-    
-    
-    if(cobra$equHandle$active){
-     # browser()
-      verboseprint(cobra$verbose, important=cobra$important,
-                   sprintf("%s.[%d]: %f %f | %f | %f |[%f]", 
-                           "Best Result" ,nrow(cobra$A), realXbest[1] ,realXbest[2] , cobra$fbest[1] , cobra$trueMaxViol [cobra$ibest],(currentEps)))
-      
-    }else{
-      verboseprint(cobra$verbose, important=cobra$important,
-                   sprintf("%s.[%d](%d): %f %f | %f | %f " ,
-                           "Best Result" ,nrow(cobra$A),nrow(get("ARCHIVE",envir=intern.archive.env)), realXbest[1] ,realXbest[2] , cobra$fbest[1] , cobra$maxViol[cobra$ibest]))   
-    }
-    
+
     
     
     #browser()
@@ -347,7 +338,11 @@ cobraPhaseII <- function(cobra){
       Cinfeas <<- 0
     }
     
-    if(cobra$equHandle$active)currentEps<<-modifyMu(Cfeas,Cinfeas,Tfeas,currentEps,cobra)
+    if(cobra$equHandle$active) {
+      retval = modifyMu(Cfeas,Cinfeas,Tfeas,currentEps,cobra)
+      # cat("after modifyMu: retval: ",retval,"\n")
+      currentEps <<- retval
+    }
   }
 
 
@@ -363,11 +358,11 @@ cobraPhaseII <- function(cobra){
   testit::assert("ev1 not initialized",attr(ev1,"state")=="initialized");
   # prior to entering while-loop, ev1 must have attribute state = "initialized"
   
+  if (is.null(cobra$sac$RS_Cs)) {cobra$sac$RS_Cs = cobra$sac$Cs}
   cobra$rs_obj = RandomStart$new(cobra)
 
   while(num < cobra$feval){
-
-
+    
     ##########################################################
     # STEP6.1a: UPDATE RBF MODEL for fitness and constraints #
     ##########################################################
@@ -390,7 +385,12 @@ cobraPhaseII <- function(cobra){
     #print(cobra$xbest+1)
     fp1 = interpRBF(cobra$xbest+1, cobra$fitnessSurrogate)
     gp1 = interpRBF(cobra$xbest+1, cobra$constraintSurrogates)
-     
+    
+    if (cobra$mu4inequality) {
+      if (!is.null(cobra$currentEps))
+        cobra$mu4 = tail(cobra$currentEps,1)
+    }
+    
 
     ##########################################################
     # STEP6.1b: whitening transformation = CA                #
@@ -557,7 +557,8 @@ cobraPhaseII <- function(cobra){
       return(-gCOBRA(x,cobra))      # new convention h_i <= 0.
     } # Note that gCOBRA (in innerFuncs.R) contains the distance requirement calculation.
     
-    #cat("Starting optimizer ...\n");
+    #cat("[cobraPhaseII] Starting optimizer ... ");
+    #save(xStart, cobra, subProb2, file="nloptr_crash_data.Rdata")  # only for debugging MOPTA-nloptr-crash-problem
     switch(cobra$seqOptimizer,
            
          #RANDOMLHS={subMin<-RS(fun=subProb,lb=cobra$lower, ub=cobra$upper, n=cobra$seqFeval)},
@@ -579,7 +580,7 @@ cobraPhaseII <- function(cobra){
     )
     optimTime <- (proc.time()-ptm)[3]
     verboseprint(cobra$verbose, important=FALSE,paste(" finished (",subMin$feval,"iterations,",optimTime,"sec )"))
-    #cat("Optimization time for", subMin$feval, " iterations:", optimTime, "seconds\n")  
+    #cat("optimization time for", subMin$feval, " iterations:", optimTime, "seconds\n")  
     #cat("Predicted infill value:",subMin$value,"\n")
     
     if (cobra$DEBUG_XI) {
@@ -604,6 +605,16 @@ cobraPhaseII <- function(cobra){
     attr(ev1,"state") <- "optimized"
     globalOptCounter<-globalOptCounter+1# this is a counter which counts all main iterates without repair or tr
     cobra$fe<-cobra$fe+1   # never used
+
+    dl = distLine(xNew,cobra$A)
+    dl_thresh = 1e-7
+    ind = which(dl < dl_thresh)
+    if (length(ind)>0) {
+      msg = sprintf("WARNING at iter %d in cobraPhaseII: dist(xNew, cobra$A[%d,]) < %.0e. %s", 
+                    nrow(cobra$A), tail(ind,1), dl_thresh, "Consider using a different seqOptimizer.")
+      cat(msg,"\n")
+      warning(msg)
+    }
     
     ##########################################################
     # STEP6.4: Evaluate real functions                       #
@@ -621,12 +632,12 @@ cobraPhaseII <- function(cobra){
       cobra<-calcPEffect(cobra,ev1$xNew,ev1$xNewEval) 
     #}
 
-    
     ##########################################################
     # STEP6.5 & 6.6: Update Information and Counters         #
     ##########################################################
     cobra <- updateInfoAndCounters(cobra,ev1$xNew,ev1$xNewEval
-                                   ,ev1$newNumViol,ev1$newMaxViol,ev1$trueMaxViol
+                                   ,ev1$newNumViol,ev1$trueNumViol
+                                   ,ev1$newMaxViol,ev1$trueMaxViol
                                    ,phase,currentEps)
     
     num<-nrow(cobra$A)
@@ -640,6 +651,7 @@ cobraPhaseII <- function(cobra){
     # This includes the update of cobra$xbest, cobra$fbest, cobra$ibest.
     # In case of cobra$equHandle$active it will call updateCobraEqu in modifyEquCons.R
     # to do the job.
+    ev1$currentEps = currentEps
     cobra <- updateSaveCobra(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
                              fitFuncPenalRBF,distRequirement)
     ev1<-cobra$ev1
@@ -680,7 +692,7 @@ cobraPhaseII <- function(cobra){
     # STEP6.7: Adjust Margins                                #
     ##########################################################
     adjustMargins(Cfeas,Tfeas,Cinfeas,Tinfeas,EPS,cobra$epsilonMax,currentEps)
-    
+    # cat("after adjust:", nrow(cobra$A), currentEps,"\n")
    
     ##########################################################
     # STEP6.9: Repair Infeasible                             #
@@ -712,7 +724,7 @@ cobraPhaseII <- function(cobra){
         #xNewRepaired<-repairInfeasible(ev1$xNew,xNewEval[-1], cobra$constraintSurrogates,cobra,TRUE)
         #
         # /WK/ bug fix above: changed repairInfeasible(subMin$par,... to repairInfeasible(ev1$xNew,...
-        
+
         nRepair <- nRepair +1 
         if(all(ev1$xNew==xNewRepaired)){
           print("cannot repair infeasible solution")
@@ -737,7 +749,8 @@ cobraPhaseII <- function(cobra){
           # STEP R6.5 & 6.6: Update Information and Counters         #
           ##########################################################
           cobra <- updateInfoAndCounters(cobra,ev1$xNew,ev1$xNewEval
-                                         ,ev1$newNumViol,ev1$newMaxViol,ev1$trueMaxViol
+                                         ,ev1$newNumViol,ev1$trueNumViol
+                                         ,ev1$newMaxViol,ev1$trueMaxViol
                                          ,phase,currentEps)
           
           num<-nrow(cobra$A)
@@ -745,8 +758,17 @@ cobraPhaseII <- function(cobra){
           ##########################################################
           # STEP R6.8: Update and save cobra                       #
           ##########################################################
+          # if (ev1$newNumViol==0) 
+          #   browser()
           cobra <- updateSaveCobra(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
                                    fitFuncPenalRBF,distRequirement)
+          
+          realXbest<-inverseRescale(cobra$xbest,cobra)
+          verboseprint(cobra$verbose, important=cobra$important,
+                       sprintf("%s.[%d]: %f %f | %f | %f (Fres=%f, nViol=%d, maxViol=%f) " ,
+                               "Best Result" ,nrow(cobra$A), #nrow(get("ARCHIVE",envir=intern.archive.env)), 
+                               realXbest[1] ,realXbest[2] , cobra$fbest[1] , cobra$maxViol[cobra$ibest], ev1$xNewEval[1], ev1$newNumViol, ev1$newMaxViol))
+          
           
          ##########################################################
          # STEP R6.7: Adjust Margins                              #
@@ -796,7 +818,8 @@ cobraPhaseII <- function(cobra){
           # STEP TRA6.5 & 6.6: Update Information and Counters         #
           ##########################################################
           cobra <- updateInfoAndCounters(cobra,ev1$xNew,ev1$xNewEval
-                                         ,ev1$newNumViol,ev1$newMaxViol,ev1$trueMaxViol
+                                         ,ev1$newNumViol,ev1$trueNumViol
+                                         ,ev1$newMaxViol,ev1$trueMaxViol
                                          ,phase,currentEps)
           if(cobra$DEBUG_TR && all(cobra$xbest==ev1$xNew)){
             cat("[",nrow(cobra$A),"]TR DEBUG ::TR improved the best objective"

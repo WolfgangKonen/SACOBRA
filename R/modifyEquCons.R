@@ -37,7 +37,8 @@
 #'    \cr \strong{TMV}: (Total Maximum Violation) takes the median of the maximum violation of the initial population
 #'    \cr \strong{EMV}: takes the median of the maximum violation of equality constraints of the initial population
 #'    \cr \strong{useGrange}: takes the average of the ranges of the equality constraint functions}
-#'    \item{epsType}{["SAexpFunc"] type of the function used to modify margin \eqn{\mu} during the optimization process can be one of ["SAexpFunc"|"expFunc"|"Zhang"|"CONS"]. see \code{\link{modifyMu}}.}
+#'    \item{epsType}{["SAexpFunc"] type of the function used to modify margin \eqn{\mu} during the optimization process 
+#'        can be one of ["SAexpFunc"|"expFunc"|"funcDim"|"funcSDim"|"Zhang"|"CONS"]. see \code{\link{modifyMu}}.}
 #'    \item{dec}{[1.5] decay factor for margin \eqn{\mu}. see \code{\link{modifyMu}}}
 #'    \item{refine}{[TRUE] enables the refine mechanism f the equality handling mechanism.}
 #'    \item{refineMaxit}{maximum number of iterations used in the refine step. Note that the refine step runs on the surrogate models and does not impose any extra real function evaluation.}
@@ -48,10 +49,10 @@ defaultEquMu<-function(){
   equHandle<-list(  active=TRUE,
                     equEpsFinal=1e-07,
                     initType="TAV", #"useGrange", "TAV", "TMV", "EMV"
-                    epsType="expFunc", 
+                    epsType="expFunc",   # expFunc SAexpFunc funcDim funcSDim Zhang CONS
                     dec=1.5,
                     refine=TRUE,
-                    refineMaxit=100
+                    refineMaxit=1000 # 100
                   )
   return(equHandle)
 }
@@ -78,11 +79,11 @@ defaultEquMu<-function(){
 #' 
 updateCobraEqu<-function(cobra,xNew){
 
-  currentEps<-cobra$currentEps[(length(cobra$currentEps))]
-  equMargin<-currentEps
+  equMargin = max(cobra$conTol, tail(cobra$currentEps,1))
+  #equMargin = tail(cobra$currentEps,1)    # new 2025/04/02
   xNewIndex<-length(cobra$numViol)
   temp<-cobra$Gres
-  #temp[,cobra$equIndex]<-temp[,cobra$equIndex]-currentEps
+  #temp[,cobra$equIndex]<-temp[,cobra$equIndex]-equMargin
 
   #   # /WK/ this currentFeas-calculation has a bug for mixed equality-inequality constraints
   #   #      (the inequality constraints are compared to equMargin, but should be compared to 0)
@@ -101,6 +102,7 @@ updateCobraEqu<-function(cobra,xNew){
   #          g_i(x) <= 0,  h_j(x) - equMargin <= 0,    -h_j(x) - equMargin <= 0
   #
   # for each row of cobra$Gres is valid and set only rows fulfilling this to currentFeas==TRUE
+  # New /2025/04/02: replace 0 by cobra$conTol
   temp<-cbind(temp,-temp[,cobra$equIndex])
   equ2Index <- c(cobra$equIndex,cobra$nConstraints+(1: length(cobra$equIndex)))
   temp[,equ2Index] <- temp[,equ2Index] - equMargin
@@ -108,7 +110,8 @@ updateCobraEqu<-function(cobra,xNew){
     y<-max(0,temp[i,])
     return(y)
   })  
-  currentFeas<-which(currentMaxViols <= 0 )
+  currentFeas<-which(currentMaxViols <= 0 )  
+  #currentFeas<-which(currentMaxViols <= cobra$conTol )  # new 2025/04/02: replaces "<=0"
 
   #   # /WK/2016/04/: The while-loop below was buggy for the following reasons: 
   #   #   - It could lead to a non-terminating loop for mixed equality-inequality constraints, 
@@ -179,14 +182,21 @@ updateCobraEqu<-function(cobra,xNew){
 #' @keywords internal   
 #' 
 modifyMu<-function(Cfeas,Cinfeas,Tfeas,currentEps,cobra){
+  if (cobra$muGrow > 0) {
+    if (nrow(cobra$A) %% cobra$muGrow <= 1)  {  # experimental:
+      currentEps = cobra$currentEps[1]          # every muGrow=100 iter re-enlarge the \mu-band
+    }
+  }
+  
   alg<-cobra$equHandle$epsType
   switch(alg,
          expFunc={ # old funcCon function which is refered in equHandle-test file
-           currentEps<-max(currentEps[length(currentEps)]/(cobra$equHandle$dec), cobra$equHandle$equEpsFinal)
+           #currentEps<-max(tail(cobra$currentEps,1)/(cobra$equHandle$dec), cobra$equHandle$equEpsFinal)
+           currentEps<-max(currentEps/(cobra$equHandle$dec), cobra$equHandle$equEpsFinal)
          },
-        SAexpFunc={ # Self-Adjsuting expFunc
-          currentEps<-max(mean(c(currentEps[length(currentEps)]/(cobra$equHandle$dec),cobra$trueMaxViol[cobra$ibest]*cobra$finMarginCoef)), cobra$equHandle$equEpsFinal)
-        },
+         SAexpFunc={ # Self-Adjsuting expFunc
+           currentEps<-max(mean(c(tail(cobra$currentEps,1)/(cobra$equHandle$dec),cobra$trueMaxViol[cobra$ibest]*cobra$finMarginCoef)), cobra$equHandle$equEpsFinal)
+         },
          funcDim={
            currentEps<-(cobra$currentEps[1]*(1/cobra$equHandle$dec)^((nrow(cobra$A)-3*ncol(cobra$A))/((Tfeas^2)/2-1)))+cobra$equHandle$equEpsFinal
          },

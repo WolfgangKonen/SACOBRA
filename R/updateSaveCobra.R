@@ -21,7 +21,7 @@
 #' @param penaF   see \code{\link{cobraPhaseII}}
 #' @param gama   see \code{\link{cobraPhaseII}} 
 #' @param EPS   see \code{\link{cobraPhaseII}}
-#' @param fitFuncPenalRBF   helper function from \code{\link{cobraPhaseII}}
+#' @param fitFuncPenalRBF   helper function from \code{\link{cobraPhaseII}, only needed for predSoluPenal}
 #' @param distRequirement   helper function from \code{\link{cobraPhaseII}}
 #' @param fitnessSurrogate  the model used for \code{predSoluFunc}
 #'
@@ -58,11 +58,13 @@
 #'      \item{optimizer}{ e.g. "COBYLA"  }
 #'      \item{optimizationTime}{  in sec}
 #'      \item{conv}{ optimizer convergence code }
-#'      \item{dist}{ distance of the current point (row of \code{cobra$A}) to the true solution 
+#'      \item{distSolu}{ distance of the current point (row of \code{cobra$A}) to the true solution 
 #'            \code{cobra$solu} in rescaled space. If there is more than one solution, take the one
 #'            which has the minimum distance element (since this is the solution to which the 
-#'            current run converges). }
-#'      \item{distOrig}{ same as \code{dist}, but in original space  }
+#'            current run converges). If \code{cobra$solu} is NULL, use instead the optimal 
+#'            solution found so far (\code{submin$par})}
+#'      \item{distOrig}{ same as \code{distSolu}, but in original space  }
+#'      \item{distX0}{ same as \code{distSolu}, but with distance to the initial starting point \code{cobra$x0}}
 #'      \item{XI}{  the DRC element used in the current iteration }
 #'      \item{seed}{ the seed used in each run }
 #'   }
@@ -99,7 +101,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   predY=ev1$predY;
   predVal=ev1$predVal;
   df_RS  <-  cobra$df$RS
-  #browser()
+  if (is.null(df_RS)) df_RS = c(rep(FALSE,cobra$initDesPoints))
   diff<-nrow(cobra$A)-length(predY)
   #deprecated
   # if(cobra$LocalExpensiveSearch && nrow(cobra$A)>length(predY)){
@@ -113,8 +115,8 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   #   ev1$optimizationTime<-c(ev1$optimizationTime,rep(NA,diff))
   #   df_RS  <-  c(cobra$df$RS,rep(NA,diff))
   # }
-  
-  df_RS  <-  c(df_RS,!all(cobra$xbest==cobra$xStart))
+  is_RS = (cobra$RSDONE[length(cobra$RSDONE)]=="RS")
+  df_RS  <-  c(df_RS,is_RS)
   if (cobra$DEBUG_XI) {
     df_fxStart <- c(cobra$df$fxStart,cobra$fn(cobra$xStart)[1])
     df_fxbest <-  c(cobra$df$fxbest,cobra$fn(cobra$xbest)[1])
@@ -204,13 +206,16 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     solu=subMin$par;    # subMin$par: the optimal solution found so far
     soluOrig <- inverseRescale(subMin$par,cobra);
   } else {
-    if (cobra$rescale) 
-      if (is.matrix(solu)) {
-        solu <- t(sapply(1:nrow(solu),function(i){ forwardRescale(solu[i,],cobra)}))
-      } else {
-        solu <- forwardRescale(solu,cobra);
-      }
-    soluOrig <- cobra$solu;
+    # if (cobra$rescale) 
+    #   if (is.matrix(solu)) {
+    #     solu <- t(sapply(1:nrow(solu),function(i){ forwardRescale(solu[i,],cobra)}))
+    #   } else {
+    #     solu <- forwardRescale(solu,cobra);
+    #   }
+    #soluOrig <- cobra$solu;
+    ### /WK/2025/03: bug fix: cobra$solu was already rescaled in cobraInit in 
+    ### case cobra$rescale=TRUE
+    soluOrig <- cobra$originalSolu
   }
   # now solu is always in *rescaled* input space
   
@@ -245,14 +250,15 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     # da has nrow(solu) columns, each column has the distance of the ith solu to all points cobra$A.
     # Select this column which has the element with minimum distance.
     ind=which.min(apply(da,2,min))
-    distA = da[,ind]
+    distSolu = da[,ind]
     do=sapply(1:nrow(soluOrig),function(i){ distLine(soluOrig[i,],origA) })
     distOrig = do[,ind]
   } else {
-    distA = distLine(solu,cobra$A)       # distance in rescaled space, distLine: see RbfInter.R
+    distSolu = distLine(solu,cobra$A)    # distance in rescaled space, distLine: see RbfInter.R
     distOrig = distLine(soluOrig,origA)  # distance in original space
   }
-  
+  distX0 = distLine(cobra$x0, cobra$A)   # distance in rescaled space to best point after initial design
+
   testit::assert("[updateSaveCobra] predY",length(cobra$Fres)==length(predY))
   testit::assert("[updateSaveCobra] optimizerConvergence",length(df_predSolu)==length(optimizerConvergence))
   if(cobra$CONSTRAINED){
@@ -267,25 +273,27 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
 
   # result data frame
   if(cobra$CONSTRAINED){
-     df <- data.frame(y=cobra$Fres, 
-                   predY=predY,           # surrogate fitness
-                   #predSolu=interpRBF(solu,cobra$fitnessSurrogate),  # OLD and WRONG
-                   predSolu=df_predSolu,
-                   feasible=feas, 
-                   feasPred=feasPred,
-                   nViolations=cobra$numViol,
-                   maxViolation=cobra$maxViol,
-                   FEval=feval, 
-                   Best=cobra$fbestArray,
-                   optimizer=rep(cobra$seqOptimizer,length(cobra$Fres)),
-                   optimizationTime=ev1$optimizationTime,
-                   conv=optimizerConvergence,
-                   dist=distA,
-                   distOrig=distOrig,
-                   RS=df_RS,           # TRUE, if it is an iteration with random start point
-                   row.names=NULL
-      )
-     
+    df <- data.frame(y=cobra$Fres, 
+                     predY=predY,           # surrogate fitness
+                     #predSolu=interpRBF(solu,cobra$fitnessSurrogate),  # OLD and WRONG
+                     predSolu=df_predSolu,
+                     feasible=feas, 
+                     feasPred=feasPred,
+                     nViolations=cobra$numViol,
+                     trueNViol=cobra$trueNumViol,
+                     maxViolation=cobra$maxViol,
+                     FEval=feval, 
+                     Best=cobra$fbestArray,
+                     optimizer=rep(cobra$seqOptimizer,length(cobra$Fres)),
+                     optimizationTime=ev1$optimizationTime,
+                     conv=optimizerConvergence,
+                     distSolu=distSolu,
+                     distOrig=distOrig,
+                     distX0=distX0,
+                     RS=df_RS,           # TRUE, if it is an iteration with random start point
+                     row.names=NULL
+    )
+    
   }else{  # i.e. cobra$CONSTRAINED=F, an unconstrained optimization
     
     if(is.null(cobra$df$realfeval))
@@ -304,8 +312,9 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
                      optimizer=rep(cobra$seqOptimizer,length(cobra$Fres)),
                      optimizationTime=ev1$optimizationTime,
                      conv=optimizerConvergence,
-                     dist=distA,
+                     distSolu=distSolu,
                      distOrig=distOrig,
+                     distX0=distX0,
                      RS=df_RS,           # TRUE, if it is an iteration with random start point
                      row.names=NULL
     )
@@ -340,6 +349,16 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   df <- cbind(iter=1:nrow(df),df)
   df <- cbind(df,seed=cobra$cobraSeed)
   cobra$df <- df
+  
+  # /WK/2025/03/24: only diagnostics: does the constraint prediction know that the solution
+  # point is feasible (at least in the later stages of the surrogates)?
+  constraintPrediction <-  interpRBF(cobra$solu,cobra$constraintSurrogates) 
+  numViolSoluPred = sum(constraintPrediction > cobra$conTol)
+  maxViolSoluPred = max(0, max(constraintPrediction-cobra$conTol))
+  
+  na_for_null <- function(v) {
+    return (ifelse(is.null(v),NA,v))
+  }
   cobra$df2 <- rbind(cobra$df2,data.frame(
     iter=tail(df$iter,1),
     predY=tail(predY,1),           # surrogate fitness at current point xNew  
@@ -349,12 +368,21 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     sigmaD=sigmaD[1],
     penaF=penaF[1],
     XI=gama,
-    fBest=tail(df$Best,1),
-    EPS=EPS[1]
+    fBest=tail(df$Best,1)
+    , EPS=EPS[1]
+    , currentEps= na_for_null(tail(cobra$currentEps,1))
+    , numViolSoluPred=numViolSoluPred
+    , maxViolSoluPred=maxViolSoluPred
     , PLOG=tail(cobra$PLOG,1)
     , pEffect=cobra$pEffect
     , err1=tail(cobra$err1,1)
     , err2=tail(cobra$err2,1)
+    , nv_conB=na_for_null(ev1$nv_conB)        # diagnostics for refine mechanism
+    , nv_conA=na_for_null(ev1$nv_conA)
+    , nv_trueB=na_for_null(ev1$nv_trueB)
+    , nv_trueA=na_for_null(ev1$nv_trueA)
+    , nViol=tail(cobra$numViol,1)             # only for easier comparison with nv_trueA  
+    , ev1_state = attr(ev1,"state")
     #,fBest2=fitFuncPenalRBF(xNew)    # not the same as predVal, since penaF or sigmaD might have changed (!)
     #,fSolu=fitFuncPenalRBF(min(solu))# not the same as predSolu for the same reason  
     #,feas=feas,
@@ -389,5 +417,33 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     save(cobraResult, file=sprintf("results/cobra-%s-%s-%i.RData",cobra$fName,cobra$seqOptimizer,cobra$cobraSeed))
   }
   cobra$ev1<-ev1
+  
+  #WK/2025/03: The following lines were moved from updateInfoAndCounters to here in updateSaveCobra, 
+  #            because they use cobra$fbest and cobra$ibest which are updated only in updateSaveCobra:
+  xNewEval = ev1$xNewEval
+  newNumViol = ev1$newNumViol
+  newMaxViol = ev1$newMaxViol
+  currentEps = ev1$currentEps
+  #SB: I added another print line which prints the best found solution after several iterations, if we do not have any interest for this the following lines can be commented
+  realXbest<-inverseRescale(cobra$xbest,cobra)
+  #realXbest<-sapply(1:length(cobra$xbest) , function(i){scales::rescale(cobra$xbest[i],from=c(cobra$newlower,cobra$newupper),to=c(cobra$lower[i],cobra$upper[i]))})
+  if(cobra$equHandle$active){
+    verboseprint(cobra$verbose, important=cobra$important,
+                 sprintf("%s.[%d]: %.4f %.4f | %f | %.1e |[%.1e] (Fres=%f, nViol=%d, maxViol=%.1e)", 
+                         "Best Result" ,nrow(cobra$A), realXbest[1], realXbest[2], cobra$fbest[1], 
+                         cobra$trueMaxViol[cobra$ibest], currentEps, 
+                         xNewEval[1], newNumViol, newMaxViol))
+    
+  }else{
+    verboseprint(cobra$verbose, important=cobra$important,
+                 sprintf("%s.[%d]: %.4f %.4f | %.1e | %.1e (Fres=%f, nViol=%d, maxViol=%.1e) " ,
+                         "Best Result" ,nrow(cobra$A), #nrow(get("ARCHIVE",envir=intern.archive.env)), 
+                         realXbest[1], realXbest[2], cobra$fbest[1], cobra$maxViol[cobra$ibest], xNewEval[1], newNumViol, newMaxViol))
+    # verboseprint(cobra$verbose, important=cobra$important,
+    #              sprintf("%s.[%d]: %f %f | %f | %f " ,
+    #                      "Best Result" ,nrow(cobra$A), realXbest[1] ,realXbest[2] , cobra$fbest[1] , cobra$maxViol[cobra$ibest]))   
+  }
+  
+  
   return(cobra)
 } # updateSaveCobra()

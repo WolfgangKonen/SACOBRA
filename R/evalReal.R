@@ -70,8 +70,10 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
     if(cobra$equHandle$refine & 
        attr(ev1,"state")=="optimized")    # do refine step only after surrogate optimizer (not after repair or TR)
     {
-      if (cobra$trueMaxViol[cobra$ibest] > cobra$equHandle$equEpsFinal) {
-        #  print("refining the solution")
+      # if (cobra$trueMaxViol[cobra$ibest] > cobra$equHandle$equEpsFinal) {
+      if (cobra$trueMaxViol[cobra$ibest] >= 0) {    # testwise, enforce refine in every step
+        #cat("[evalReal] starting refine ...\n")
+        #
         # refine step, special for equality constraints: 
         # Due to currentEps, xNew will not fulfill the equality constraints exactly. 
         # Search with optim (i.e. CG, BFGS or similar) a point near to xNew which fulfills 
@@ -91,15 +93,19 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
         }
         
         if (cobra$trueFuncForSurrogates)
-          myf <- function(x){conR=cobra$fn(x)[-1];
-          sum(c(max(0,conR[-cobra$equIndex])^2,conR[cobra$equIndex]^2)); }
-        #myf <- function(x)sum(abs(interpRBF(x,cobra$constraintSurrogates)[cobra$equIndex]));
+          myf <- function(x){
+            conR=cobra$fn(x)[-1];
+            sum(c(max(0,conR[-cobra$equIndex])^2,conR[cobra$equIndex]^2)); 
+          }
+        
+        # /WK/ the name "cg"'" is just a reminiscent that we initially used optim with method="CG" (conjugate gradient)
         cg = optim(ev1$xNew,myf,lower=cobra$lower,upper=cobra$upper,method="L-BFGS-B",
                    control=list(maxit=cobra$equHandle$refineMaxit))  
-        # /WK/  bug fix: lower and upper added (otherwise cg$par might get out of bounds) 
-        #       --> this requires method="L-BFGS-B"
+        # /WK/ bug fix: lower and upper added (otherwise cg$par might get out of bounds) 
+        #      --> this requires method="L-BFGS-B"
         if (cg$convergence==1) { # iteration limit maxit has been reached
-          warning(sprintf("Refine step: optim did not converge within maxit iterations. %s",
+          warning(sprintf("Refine step: optim did not converge within maxit=%d iterations. %s",
+                          cobra$equHandle$refineMaxit,
                           "Consider to increase cobra$equHandle$refineMaxit"))
         }
         if(! (cg$convergence %in% c(0,1))){print(cg$message)}
@@ -107,12 +113,13 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
         
         #### NOTE: sometimes we see convergence code 52 with message from optim
         #### "ERROR: ABNORMAL_TERMINATION_IN_LNSRCH" but the result looks very o.k. 
-        #### Therefore we comment these warnings out
+        #### Therefore we comment the following warning out
         #if (cg$convergence>0) {
         #  warning(sprintf("Refine step: optim did not converge, code=%d, message=%s",cg$convergence,cg$message))
         #}
         ev1$x_1 = cg$par
-        #
+        
+        # ------ The following is only debug/diagnostics: ----------------
         # /WK/ The debug-printout of the three lines below shows that optim succeeds in all cases to 
         #      turn the equality mismatch in cgbefore, which may be large (>1) in initial iterates,
         #      down to cg$value = 1e-8 or better. And cgtrue, the evaluation of cg$par on the true
@@ -122,9 +129,10 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
         cgtrue =  sum(c(max(0,conTrue[-cobra$equIndex])^2,conTrue[cobra$equIndex]^2))
         #### printout, only for debugging
         if(is.na(cgtrue))print("The solution returned by refine mechanism is not defined for the objective function, please check if the given lower and upper limits are correct")
-       # cat(sprintf("cg-values (before,after,true) = (%g, %g, %g)\n",cgbefore,cg$value,cgtrue))
+        cat(sprintf("cg-values (before,after,true) = (%g, %g, %g)\n",cgbefore,cg$value,cgtrue))
         #
         # this is just more detailed constraint information, which may be inspected in browser:
+        equInd = cobra$equIndex
         if (!cobra$trueFuncForSurrogates) {
           conB=interpRBF(ev1$xNew,cobra$constraintSurrogates) # constraint surrogates before optim
           conA=interpRBF(ev1$x_1,cobra$constraintSurrogates)  # constraint surrogates after optim 
@@ -133,8 +141,31 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
           conA=cobra$fn(ev1$x_1)[-1]    # true constraints after optim 
           
         }
-        #browser()  
-        ev1$xNew = ev1$x_1
+        trueB=cobra$fn(ev1$xNew)[-1]
+        trueA=cobra$fn(ev1$x_1)[-1]
+        conB[equInd] = abs(conB[equInd]) - currentEps
+        conA[equInd] = abs(conA[equInd]) - currentEps
+        trueB[equInd] = abs(trueB[equInd]) - currentEps
+        trueA[equInd] = abs(trueA[equInd]) - currentEps
+        pos_conB = which(conB > cobra$conTol)
+        pos_conA = which(conA > cobra$conTol)
+        pos_trueB = which(trueB > cobra$conTol)
+        pos_trueA = which(trueA > cobra$conTol)
+        ev1$nv_conB = length(pos_conB)     # will be added to df2 in updateSaveCobra
+        ev1$nv_conA = length(pos_conA)
+        ev1$nv_trueB = length(pos_trueB)
+        ev1$nv_trueA = length(pos_trueA)
+        check_df = data.frame(conB=conB, conA=conA, trueB=trueB, trueA=trueA,
+                              diffB=pmax(0,trueB)-pmax(0,conB),
+                              diffA=pmax(0,trueA)-pmax(0,conA))
+        
+        ### --- only for debugging the cgbefore peculiarity:
+        #if (cgbefore < 1e-15) {
+        #  browser()
+        #}
+        # ----------------------------------------------------------------
+        
+        ev1$xNew = ev1$x_1            # set ev1$xNew to be the infill point AFTER refine
         attr(ev1,"state") <- "refined"
         
       } # if (currentEps < ...)
@@ -173,69 +204,83 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
     ev1$trueMaxViol<-0
     ev1$feas=T
   }
-  if(cobra$CONSTRAINED)if (cobra$equHandle$active){
-    temp<-ev1$xNewEval[-1]
-    # /WK/the new version: we check whether 
-    #
-    #          g_i(x) <= 0,  h_j(x) - currentEps <= 0,    -h_j(x) - currentEps <= 0
-    #
-    # for the approximation newPredC with cobra$constraintSurrogates and set ev1$newNumViol to the
-    # number of violated constraints.
-    # NOTE that temp is also used for ev1$newMaxViol below.
-    temp<-c(temp,-temp[cobra$equIndex])
-    equ2Index <- c(cobra$equIndex,cobra$nConstraints+(1: length(cobra$equIndex)))
-    temp[equ2Index] <- temp[equ2Index] - currentEps
-    ev1$newNumViol<-length(which(temp > cobra$conTol)) # number of constraint violations for new point #0 change to conTol
-    ev1$feas = c(ev1$feas, ev1$newNumViol < 1 )
-    #  # /WK/ this OLD currentFeas-calculation has a bug for mixed equality-inequality constraints
-    #  #      (the inequality constraints are compared to currentEps, but should be compared to 0)
-    #  temp[cobra$equIndex]<-abs(temp[cobra$equIndex])
-    #  ev1$newNumViol<-length(which(temp-currentEps > cobra$conTol)) # number of constraint violations for new point #0 change to conTol
+  if(cobra$CONSTRAINED)
+    if (cobra$equHandle$active){
+      temp<-ev1$xNewEval[-1]
+      # /WK/the new version: we check whether 
+      #
+      #          g_i(x) <= 0,  h_j(x) - currentEps <= 0,    -h_j(x) - currentEps <= 0
+      #
+      # for the approximation newPredC with cobra$constraintSurrogates and set ev1$newNumViol to the
+      # number of violated constraints.
+      # NOTE that temp is also used for ev1$newMaxViol below.
+      temp<-c(temp,-temp[cobra$equIndex])
+      equ2Index <- c(cobra$equIndex,cobra$nConstraints+(1: length(cobra$equIndex)))
+      temp[equ2Index] <- temp[equ2Index] - currentEps
+      ev1$newNumViol<-length(which(temp > cobra$conTol)) # number of constraint violations for new point # 0 changed to conTol
+      
+      # just a debug check:
+      if (attr(ev1,"state") %in% c("optimized","refined")) {
+        if (ev1$newNumViol != ev1$nv_trueA) {
+          browser()
+        }
+        # cat(attr(ev1,"state"), ev1$newNumViol, ev1$nv_trueA)
+        testit::assert(ev1$newNumViol == ev1$nv_trueA)
+        # (If state is not "optimized" at start of evalReal, then the branch that 
+        #  computes nv_trueA will not been executed and the assertion would fail. Otherwise it should hold.)
+      }
 
-
-    # /WK/ bring here currentEps and equ2Index into play as well
-    ptemp<- c(newPredC,-newPredC[cobra$equIndex])
-    equ2Index <- c(cobra$equIndex,cobra$nConstraints+(1: length(cobra$equIndex)))
-    ptemp[equ2Index] <- ptemp[equ2Index] - currentEps
-    ev1$newNumPred<-length(which(ptemp > cobra$conTol)) # the same on constraint surrogates
-    ev1$feasPred = c(ev1$feasPred, ev1$newNumPred < 1 ) 
-    
-    #WK: changed ev1$newMaxViol back to hold the artificial constraint max violation (currentEps-
-    #    margin for equality constraints). This is one condition for entering repair (cobraPhaseII)
-    M <-  max(0,max(temp))  # maximum violation
-    try(if(M <= cobra$conTol){M<=0 })
-    if(class(.Last.value)[1]=="try-error"){
-      print("an error occurred in line 187 evalReal.R")
-      browser()}
-    else{
-      # print("no exception")  
-    }
-    ev1$newMaxViol <- M  
-    #SB: added the following lines, because it is also interesting to observe or save the information 
-    #about the real maximum violation instead of the maximum distance to the artificial constraints 
-    temp<-ev1$xNewEval[-1]
-    temp[cobra$equIndex]<-abs(temp[cobra$equIndex])
-    #browser()
-    M <-  max(0,max(temp*cobra$GRfact))  # maximum violation
-  #  M <-  max(0,max(temp))  # maximum violation
-    if(M <= cobra$conTol) M=0 
-    ev1$trueMaxViol <- M  
-    
-    #--only debug
-    #if (ev1$newMaxViol==0) browser()  
-  }else{  # i.e. if (!cobra$equHandle$active)
-    ev1$newNumViol<-length(which(ev1$xNewEval[-1] > cobra$conTol)) # number of constraint violations for new point #0 change to conTol
-    ev1$feas = c(ev1$feas, ev1$newNumViol < 1 )
-    ev1$newNumPred<-length(which(newPredC > cobra$conTol)) # the same on constraint surrogates
-    ev1$feasPred = c(ev1$feasPred, ev1$newNumPred < 1 ) 
-    
-    if((max(0,max((ev1$xNewEval[-1])) )) > cobra$conTol){  # maximum violation
-      ev1$newMaxViol<-max(0,max((ev1$xNewEval[-1])) )  
-    }else{
-      ev1$newMaxViol<-0
-    }
-    ev1$trueMaxViol<-ev1$newMaxViol 
-  } # (cobra$equHandle$active)
+      ev1$feas = c(ev1$feas, ev1$newNumViol == 0 )
+      #  # /WK/ this OLD currentFeas-calculation has a bug for mixed equality-inequality constraints
+      #  #      (the inequality constraints are compared to currentEps, but should be compared to 0)
+      #  temp[cobra$equIndex]<-abs(temp[cobra$equIndex])
+      #  ev1$newNumViol<-length(which(temp-currentEps > cobra$conTol)) # number of constraint violations for new point #0 change to conTol
+      
+      
+      # /WK/ brought here currentEps and equ2Index into play as well
+      ptemp<- c(newPredC,-newPredC[cobra$equIndex])
+      equ2Index <- c(cobra$equIndex,cobra$nConstraints+(1: length(cobra$equIndex)))
+      ptemp[equ2Index] <- ptemp[equ2Index] - currentEps
+      ev1$newNumPred<-length(which(ptemp > cobra$conTol)) # the same on constraint surrogates
+      ev1$feasPred = c(ev1$feasPred, ev1$newNumPred < 1 ) 
+      
+      #WK: changed ev1$newMaxViol back to hold the artificial constraint max violation (currentEps-
+      #    margin for equality constraints). This is one condition for entering repair (cobraPhaseII)
+      M <-  max(0,max(temp))  # maximum violation
+      try(if(M <= cobra$conTol){M<=0 })
+      if(class(.Last.value)[1]=="try-error"){
+        print("an error occurred in evalReal.R")
+        browser()}
+      else{
+        # print("no exception")  
+      }
+      ev1$newMaxViol <- M  
+      #SB: added the following lines, because it is also interesting to observe or save the information 
+      #about the real maximum violation instead of the maximum distance to the artificial constraints 
+      temp<-ev1$xNewEval[-1]
+      temp[cobra$equIndex]<-abs(temp[cobra$equIndex])
+      ev1$trueNumViol<-length(which(temp > cobra$conTol))
+      #browser()
+      M <-  max(0,max(temp*cobra$GRfact))  # maximum violation
+      #  M <-  max(0,max(temp))  # maximum violation
+      if(M <= cobra$conTol) M=0 
+      ev1$trueMaxViol <- M  
+      
+      #--only debug
+      #if (ev1$newMaxViol==0) browser()  
+    }else{  # i.e. if (!cobra$equHandle$active)
+      ev1$newNumViol<-length(which(ev1$xNewEval[-1] > cobra$conTol)) # number of constraint violations for new point #0 change to conTol
+      ev1$feas = c(ev1$feas, ev1$newNumViol == 0 )
+      ev1$newNumPred<-length(which(newPredC > cobra$conTol)) # the same on constraint surrogates
+      ev1$feasPred = c(ev1$feasPred, ev1$newNumPred == 0 ) 
+      
+      if((max(0,max((ev1$xNewEval[-1])) )) > cobra$conTol){  # maximum violation
+        ev1$newMaxViol<-max(0,max((ev1$xNewEval[-1])) )  
+      }else{
+        ev1$newMaxViol<-0
+      }
+      ev1$trueMaxViol = ev1$newMaxViol   # w/o artificial band around eq constraints, trueMaxViol and newMaxViol are the same
+    } # (cobra$equHandle$active)
   
   return (ev1)
 }

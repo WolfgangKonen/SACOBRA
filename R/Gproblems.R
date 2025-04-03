@@ -902,22 +902,22 @@ COP<-R6::R6Class("COP",
                      self$xStart=NA  
                    },
                    callG24=function(){
-                   self$fn=function(x){
-                     obj<- -x[1] - x[2]
-                     g1<- -2*x[1]^4 + 8*x[1]^3 - 8*x[1]^2 + x[2] - 2
-                     g2<- -4*x[1]^4 +32*x[1]^3 -88*x[1]^2 + 96*x[1] + x[2] - 36
-                     
-                     res<-c(objective=obj,g1=g1,g2=g2)
-                   };
-                   self$dimension=2  
-                   self$lower=c(0,0)
-                   self$upper=c(3,4)
-                   self$nConstraints=2
-                   self$solu=c(2.329520197477607, 3.17849307411768)
-                   self$xStart=NA 
-                 })
+                     self$fn=function(x){
+                       obj<- -x[1] - x[2]
+                       g1<- -2*x[1]^4 + 8*x[1]^3 - 8*x[1]^2 + x[2] - 2
+                       g2<- -4*x[1]^4 +32*x[1]^3 -88*x[1]^2 + 96*x[1] + x[2] - 36
+                       
+                       res<-c(objective=obj,g1=g1,g2=g2)
+                     };
+                     self$dimension=2  
+                     self$lower=c(0,0)
+                     self$upper=c(3,4)
+                     self$nConstraints=2
+                     self$solu=c(2.329520197477607, 3.17849307411768)
+                     self$xStart=NA 
+                 }) # end of "privat = list( ..."
                
-                 )
+                 )  # end of "R6Class( ..."
 
 checkProblems <- function() {
   problems<-sprintf("G%02i",c(1:24))
@@ -932,12 +932,12 @@ checkProblems <- function() {
     if(problem=="G13"){
       testit::assert("lower and solu should have the same length",length(newProb$lower)==length(newProb$solu[1,]))
       testit::assert("solu and upper should have the same length",length(newProb$solu[1,])==length(newProb$upper))
-      testit::assert("solu should be vector os size dimension",length(newProb$solu[1,])==newProb$dimension)
+      testit::assert("solu should be vector of size dimension",length(newProb$solu[1,])==newProb$dimension)
       testit::assert("fn should return a vector of size nConstraints+1",length(newProb$fn(newProb$solu[1,]))==newProb$nConstraints+1)
     }else{
       testit::assert("lower and solu should have the same length",length(newProb$lower)==length(newProb$solu))
       testit::assert("solu and upper should have the same length",length(newProb$solu)==length(newProb$upper))
-      testit::assert("solu should be vector os size dimension",length(newProb$solu)==newProb$dimension)
+      testit::assert("solu should be vector of size dimension",length(newProb$solu)==newProb$dimension)
       testit::assert("fn should return a vector of size nConstraints+1",length(newProb$fn(newProb$solu))==newProb$nConstraints+1)
     }
     testit::assert("lower and upper should have the same length",length(newProb$lower)==length(newProb$upper))
@@ -945,7 +945,5 @@ checkProblems <- function() {
     testit::assert("solution must be within the lower and upper limit",all((newProb$upper-newProb$solu)>=0))
     testit::assert("solution must be within the lower and upper limit",all((newProb$solu-newProb$lower)>=0))
     fprintf("done.\n")
-  }
-}
-
-# checkProblems()
+  } # for
+} # checkProblems()

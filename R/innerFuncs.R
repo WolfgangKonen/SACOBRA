@@ -112,9 +112,10 @@ subProb<-function(x,cobra){
 
 # surrogate evaluation of 'f' for constrained optimization methods  - PHASE II
 subProb2 <- function(x,cobra){
-
+  #cat("Starting subProb2 ... ")
   if(any(is.nan(x))){
     warning("subProb2: x value is NaN, returning Inf")
+    #browser()
     return(Inf)
   }
   
@@ -124,14 +125,17 @@ subProb2 <- function(x,cobra){
     y<-predict.RBFinter(cobra$fitnessSurrogate,matrix(x,ncol=cobra$dimension))
   }
   
+  #cat("finished.\n")
   return(y)
 }
 
 # surrogate evaluation of '\vec{g}' for constrained optimization methods - PHASE II
 gCOBRA <- function(x,cobra) {
-
+  #cat("Starting gCOBRA ... ")
+  
   if(any(is.nan(x))){
     warning("gCOBRA: x value is NaN, returning Inf")
+    #browser()
     return(c(Inf,rep(Inf,cobra$nConstraints)))
   }
   
@@ -157,6 +161,8 @@ gCOBRA <- function(x,cobra) {
   # if(cobra$seqOptimizer=="COBYLA"){   
   #   h <- -h
   # }
+  
+  #cat("finished.\n")
   return(h)
 }
 
@@ -197,17 +203,28 @@ isresCobyla <- function(xStart,fn=subProb2,hin=gCOBRA, cobra) {
 #
 calcConstrPred <- function(x,cobra) {
   if(cobra$equHandle$active){
-    currentEps<-cobra$currentEps[length(cobra$currentEps)]
+    #
+    # We form here the vector
+    #
+    #     ( g_i(x), h_j(x) - mu, - h_j(x) - mu ) + eps^2
+    #
+    # with mu=currentEps, eps=cobra$EPS, which should be in all components <= 0 in order to fulfill
+    # the constraints
+    # 
+    currentEps = tail(cobra$currentEps,1)
+    currentMu = cobra$mu4     # normally 0. Experimental: same value as currentEps, applied to *inequalities*
+    equIndex = cobra$equIndex
     if (cobra$trueFuncForSurrogates){   
       constraintPrediction1<- cobra$fn(x)[-1]
     } else {
       constraintPrediction1<- interpRBF(x,cobra$constraintSurrogates)
     }
-    constraintPrediction1[cobra$equIndex]<- constraintPrediction1[cobra$equIndex]-currentEps  #this creates h(x)-mu
-    constraintPrediction2<- -constraintPrediction1[cobra$equIndex]-2*currentEps               #this creates -h(x)-mu 
+    constraintPrediction1[-equIndex]<- constraintPrediction1[-equIndex]-currentMu #  g(x) - mu, new 2025/04/02
+    constraintPrediction1[equIndex]<- constraintPrediction1[equIndex]-currentEps  #  h(x) - mu
+    constraintPrediction2<- -constraintPrediction1[equIndex]-2*currentEps         # -h(x) - mu 
     # why 2*currentEps? - because we modify the already created h(x)-mu to -(h(x)-mu)-2*mu = -h(x)-mu
-    # /WK/ NOTE: this is a bug fix of 2025-01-18, since before the line with "-2*currentEps"
-    #      was commented out and (wrongly) replaced by one wit "-currentEps"
+    # /WK/ NOTE: this is a bug fix of 2025/01/18, since before the line with "-2*currentEps"
+    #      was commented out and (wrongly) replaced by one with "-currentEps"
     
     constraintPrediction<- c(constraintPrediction1,constraintPrediction2)+cobra$EPS^2
     
@@ -217,6 +234,7 @@ calcConstrPred <- function(x,cobra) {
     } else {
       constraintPrediction <-  interpRBF(x,cobra$constraintSurrogates)+cobra$EPS^2
     }
+    # TODO 2025/04/02: should we integrage currentMu also here?
     
   }
   #/WK/ Bug fix: the above lines for cobra$trueFuncForSurrogates==TRUE were missing before
