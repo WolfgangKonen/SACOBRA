@@ -22,7 +22,7 @@
 #' @field upper     upper boundary of the problem
 #' @field fn        the COP function which can be passed to SACOBRA. (see \code{fn} description in \code{\link{cobraInit}})
 #' @field nConstraints number of constraints
-#' @field xStart    the suggested optimization starting point
+#' @field xStart    the suggested optimization starting point, may be \code{NA} in some cases.
 #' @field solu      the best known solution, (only for diagnostics purposes)
 #' @field info      information about the problem
 #'   
@@ -421,6 +421,7 @@ COP<-R6::R6Class("COP",
                    callG13=function(){
                      self$fn=function(x){
                        obj<-exp(x[1]*x[2]*x[3]*x[4]*x[5])
+                       #obj<-(x[1]*x[2]*x[3]*x[4]*x[5])
                        g1<-x[1]^2+x[2]^2+x[3]^2+x[4]^2+x[5]^2-10
                        g2<-x[2]*x[3]-5*x[4]*x[5]
                        g3<-x[1]^3+x[2]^3+1
@@ -919,8 +920,11 @@ COP<-R6::R6Class("COP",
                
                  )  # end of "R6Class( ..."
 
+# check some assertions for all G-problems and 
+# return data frame gdf with a summary of characteristics of all G-problems.
 checkProblems <- function() {
   problems<-sprintf("G%02i",c(1:24))
+  gdf = data.frame()
   for (problem in problems){
     fprintf("%s %s%s", "checking problem", problem,": ")
     if(problem=="G02"||problem=="G03"){
@@ -929,21 +933,31 @@ checkProblems <- function() {
       newProb<-COP$new(problem)
     }
   
-    if(problem=="G13"){
-      testit::assert("lower and solu should have the same length",length(newProb$lower)==length(newProb$solu[1,]))
-      testit::assert("solu and upper should have the same length",length(newProb$solu[1,])==length(newProb$upper))
-      testit::assert("solu should be vector of size dimension",length(newProb$solu[1,])==newProb$dimension)
-      testit::assert("fn should return a vector of size nConstraints+1",length(newProb$fn(newProb$solu[1,]))==newProb$nConstraints+1)
-    }else{
-      testit::assert("lower and solu should have the same length",length(newProb$lower)==length(newProb$solu))
-      testit::assert("solu and upper should have the same length",length(newProb$solu)==length(newProb$upper))
-      testit::assert("solu should be vector of size dimension",length(newProb$solu)==newProb$dimension)
-      testit::assert("fn should return a vector of size nConstraints+1",length(newProb$fn(newProb$solu))==newProb$nConstraints+1)
+    if (is.matrix(newProb$solu)) {
+      theSolu = newProb$solu[1,]
+    } else {
+      theSolu = newProb$solu
     }
+    testit::assert("lower and solu should have the same length",length(newProb$lower)==length(theSolu))
+    testit::assert("solu and upper should have the same length",length(theSolu)==length(newProb$upper))
+    testit::assert("solu should be vector of size dimension",length(theSolu)==newProb$dimension)
+    testit::assert("fn should return a vector of size nConstraints+1",length(newProb$fn(theSolu))==newProb$nConstraints+1)
+
     testit::assert("lower and upper should have the same length",length(newProb$lower)==length(newProb$upper))
     testit::assert("upper limits must be larger than the lower limits",all((newProb$upper-newProb$lower)>0))
     testit::assert("solution must be within the lower and upper limit",all((newProb$upper-newProb$solu)>=0))
     testit::assert("solution must be within the lower and upper limit",all((newProb$solu-newProb$lower)>=0))
     fprintf("done.\n")
+    
+    nc = length(newProb$fn(newProb$lower))-1
+    nEqu = length(which(names(newProb$fn(newProb$lower))=="equ"))
+    sDim = ifelse(is.vector(newProb$solu), 1, length(dim(newProb$solu)))
+    gdf <- rbind(gdf, data.frame(
+      name=problem
+      , nc=nc          # number of constraints
+      , nEqu=nEqu      # number of equality constraints
+      , sDim=sDim      # number of dimensions of solu object
+    ))
   } # for
+  return (gdf)
 } # checkProblems()

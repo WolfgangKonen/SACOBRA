@@ -79,9 +79,9 @@ defaultEquMu<-function(){
 #' 
 updateCobraEqu<-function(cobra,xNew){
 
-  equMargin = max(cobra$conTol, tail(cobra$currentEps,1))
-  #equMargin = tail(cobra$currentEps,1)    # new 2025/04/02
-  xNewIndex<-length(cobra$numViol)
+  #equMargin = max(cobra$conTol, tail(cobra$currentEps,1))
+  equMargin = tail(cobra$currentEps,1)    # new 2025/04/02
+  #xNewIndex<-length(cobra$numViol)  #never used
   temp<-cobra$Gres
   #temp[,cobra$equIndex]<-temp[,cobra$equIndex]-equMargin
 
@@ -110,8 +110,8 @@ updateCobraEqu<-function(cobra,xNew){
     y<-max(0,temp[i,])
     return(y)
   })  
-  currentFeas<-which(currentMaxViols <= 0 )  
-  #currentFeas<-which(currentMaxViols <= cobra$conTol )  # new 2025/04/02: replaces "<=0"
+  #currentFeas<-which(currentMaxViols <= 0 )  
+  currentFeas<-which(currentMaxViols <= cobra$conTol)  # new 2025/04/02: replaces "<=0"
 
   #   # /WK/2016/04/: The while-loop below was buggy for the following reasons: 
   #   #   - It could lead to a non-terminating loop for mixed equality-inequality constraints, 

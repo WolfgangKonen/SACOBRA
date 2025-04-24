@@ -360,6 +360,8 @@ cobraPhaseII <- function(cobra){
   
   if (is.null(cobra$sac$RS_Cs)) {cobra$sac$RS_Cs = cobra$sac$Cs}
   cobra$rs_obj = RandomStart$new(cobra)
+  
+  final_gama = NULL
 
   while(num < cobra$feval){
     
@@ -387,6 +389,9 @@ cobraPhaseII <- function(cobra){
     gp1 = interpRBF(cobra$xbest+1, cobra$constraintSurrogates)
     
     if (cobra$mu4inequality) {
+      # The internal parameter cobra$mu4 (will become currentMu in innerfuncs.R) is normally 0. 
+      # It will be set to the last element of cobra$currentEps, if currentEps is not NULL and 
+      # if mu4inequality is TRUE. 
       if (!is.null(cobra$currentEps))
         cobra$mu4 = tail(cobra$currentEps,1)
     }
@@ -528,6 +533,8 @@ cobraPhaseII <- function(cobra){
     #why -nRepair? - globalOptCounter counts only real optimization steps
     #gama<-cobra$XI[((globalOptCounter-nRepair) %% length(cobra$XI))+1]  #/SB/ using a counter only for the global optimization excluding repair and trust region
     gama<-cobra$XI[((globalOptCounter) %% length(cobra$XI))+1]  #/SB/ using a counter only for the global optimization excluding repair and trust region
+    if (!is.null(final_gama)) 
+      gama = final_gama           # final_gama is set in line 866 of cobraPhaseII.R if cobra$finalEpsXiZero is TRUE and if it is the last iter
     cobra$ro <- gama*cobra$l      # cobra$l is set in line 236 & 607 of cobraInit.R (length of smallest side of search space)
     cobra$EPS<- EPS
     
@@ -609,9 +616,9 @@ cobraPhaseII <- function(cobra){
     dl = distLine(xNew,cobra$A)
     dl_thresh = 1e-7
     ind = which(dl < dl_thresh)
-    if (length(ind)>0) {
-      msg = sprintf("WARNING at iter %d in cobraPhaseII: dist(xNew, cobra$A[%d,]) < %.0e. %s", 
-                    nrow(cobra$A), tail(ind,1), dl_thresh, "Consider using a different seqOptimizer.")
+    if (length(ind)>0 && gama>0) {
+      msg = sprintf("WARNING in cobraPhaseII, iter %d: dist(xNew, cobra$A[%d,])<%.0e (gama=%.4f). %s", 
+                    nrow(cobra$A)+1, tail(ind,1), dl_thresh, gama, "Consider using a different seqOptimizer.")
       cat(msg,"\n")
       warning(msg)
     }
@@ -854,17 +861,26 @@ cobraPhaseII <- function(cobra){
      # cobra<-LocalExpensiveSearch(cobra)
    # } 
     
+   if (cobra$finalEpsXiZero) {
+     if (num==cobra$feval-1) {  # last iter: exploit maximally with EPS=gama=0.0 (might require cobra$conTol=1e-7)
+       EPS=0.0
+       final_gama = 0.0
+     }
+   }  
  } # while(num)
   
   #
   # NEW /WK/2016/01: We invalidate (set to NA) all iterates in cobra$df$Best before the 1st feasible point
+  # UPDATE /WK/2025/04: We inhibit the invalidation, because the information in cobra$df$feasible is 
+  #        anyhow not absolute, it is *artificial* feasibility (at least when eq. constraints are in play)
   #
   indFeas <- which(cobra$df$feasible) 
   if (length(indFeas)==0) {
     warning("No feasible solutions found in cobraPhaseII!");    
   } else {
-    # invalidate iterates before the 1st feasible point
-    cobra$df$Best[1:(indFeas[1]-1)] <- NA
+    # # invalidate iterates before the 1st feasible point
+    # cobra$df$Best[1:(indFeas[1]-1)] <- NA
+    # /WK/2025/04: We comment out the invalidation
   }
   
   cobra$optimizationTime <- ev1$optimizationTime;

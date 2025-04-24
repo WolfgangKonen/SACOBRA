@@ -28,14 +28,15 @@
 #' for default optimizer \code{\link[nloptr]{cobyla}}.
 #' 
 #' Although the software was originally designed to handle only constrained optimization problems, 
-#' it can also address unconstrained optimization problems  
+#' it can also address unconstrained optimization problems.  
 #' 
 #' How to code which constraint is equality constraint? - Function \code{fn} should return 
 #' an \eqn{(1+m+r)}-dimensional vector with named elements. The first element is the objective, the 
 #' other elements are the constraints. All equality constraints should carry the name \code{equ}. 
 #' (Yes, it is possible that multiple elements of a vector have the same name.) 
 #'
-#' @param xStart        a vector of dimension \code{d} containing the starting point for the optimization problem
+#' @param xStart        a vector of dimension \code{d} containing the starting point for the optimization problem.
+#'                      If \code{xStart} is/has NA or NaN on input, it is replaced by a random point from [ \code{lower},\code{upper} ].
 #' @param fn            objective and constraint functions: \code{fn} is a function accepting 
 #'                      a \code{d}-dimensional vector \eqn{\vec{x}} and returning an \eqn{(1+m+r)}-dimensional
 #'                      vector \code{c(}\eqn{f,g_1,\ldots,g_m,h_1,\ldots,h_r}\code{)}. See Details
@@ -148,7 +149,7 @@
 #'                    fn=function(x){c(obj=sum(x^2),equ=(x[1]-1)^2+(x[2]-0)^2-4)},  
 #'                    lower=rep(-10,d), upper=rep(10,d), feval=40)
 #'                    
-#' ## Run sacobra optimizer
+#' ## Run SACOBRA optimizer
 #' cobra <- cobraPhaseII(cobra)
 #' 
 #' ## The true solution is at solu = c(-1,0) (the point on the circle closest 
@@ -171,7 +172,7 @@
 ######################################################################################
 cobraInit <- function(xStart, fn, fName, lower, upper, feval, 
                       initDesign="LHS", initDesFactory2=FALSE,
-                      initDesPoints=2*length(xStart)+1, initDesOptP=NULL, initBias=0.005,
+                      initDesPoints=2*length(lower)+1, initDesOptP=NULL, initBias=0.005,
                       skipPhaseI=TRUE,
                       seqOptimizer="COBYLA", seqFeval=1000, seqTol=1e-6, 
                       DOSAC=1, sac=defaultSAC(DOSAC), 
@@ -192,6 +193,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
                       trueFuncForSurrogates=FALSE, 
                       saveIntermediate=FALSE, saveSurrogates=FALSE,
                       epsilonInit=NULL, epsilonMax=NULL, solu=NULL,
+                      finalEpsXiZero=FALSE,
                       cobraSeed=42 )
 {
   #if(length(xStart)>2)vis<-FALSE
@@ -202,20 +204,36 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   phase<-"init"
 
   sac$aDRC = FALSE  # temp
-
-  testit::assert("cobraInit: xStart contains NaNs",all(!is.nan(xStart)));
+  set.seed(cobraSeed)        # moved up here (before potential xStart generation)
+  dimension<-length(lower)         # number of parameters (was wrongly 'length(xStart)' before)
+  
+  # /WK/2025/04/10: bug fix: before we checked only for !is.nan (which missed the case is.na):
+  testit::assert("cobraInit: lower contains NaNs or NAs",all(!is.nan(lower)) && all(!is.na(lower)));
+  testit::assert("cobraInit: upper contains NaNs or NAs",all(!is.nan(upper)) && all(!is.na(upper)));
   testit::assert("cobraInit: lower<upper violated",all(lower<upper));
+  if (any(is.nan(xStart)) || any(is.na(xStart))) {                  
+    # /WK/2025/04/10: bug fix (before, xStart=NA would lead to weird error message w.r.t. Gres)
+    warning("xStart is/has NA or NaN --> replacing it with random point from [lower,upper]")   
+    xStart <- stats::runif(dimension,lower,upper)                                                 
+  }
     
-  dimension<-length(xStart)         # number of parameters
-  #browser()
   if(rescale){
     lb<-rep(newlower,dimension)
     up<-rep(newupper,dimension)
     xStart<-sapply(1:dimension, 
                    function(i){scales::rescale(xStart[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
     if(!is.null(solu))
-      solu<-sapply(1:dimension, 
-                   function(i){scales::rescale(solu[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
+      if (is.matrix(solu)) {
+        # /WK/2025/04/12: bug fix for the case of multiple solutions:
+        for (r in 1:nrow(solu)) {
+          solu[r,] = sapply(1:dimension, 
+                            function(i){scales::rescale(originalSolu[r,i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
+        }
+      } else {      # solu is a vector
+        solu<-sapply(1:dimension, 
+                     function(i){scales::rescale(solu[i],to=c(lb[i],up[i]),from=c(originalL[i],originalU[i]))})
+        
+      }
     fn<-rescaleWrapper(fn,originalL,originalU,dimension,newlower,newupper)
     lower<-lb
     upper<-up
@@ -245,11 +263,11 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   
 
   
-  set.seed(cobraSeed)
-  dimension<-length(xStart)         # number of parameters
+  # set.seed(cobraSeed)
   iteration<-0  
   # We just have one starting point
-  xStart <- xStart
+  # xStart <- xStart
+  # dimension<-length(xStart)         # number of parameters - was already set above
   
   I<-matrix()
   Gres <- matrix()
@@ -339,7 +357,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   cat("\n")
   sw=switch(initDesign,
          "RANDOM" = {
-           set.seed(cobraSeed)
+           # set.seed(cobraSeed)  # already set above
         
            I <- t(as.matrix(sapply(1:(initDesPoints-1), FUN=function(i)stats::runif(dimension,lower,upper))))    
                      
@@ -419,7 +437,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
          },
          
          "LHS" = {      # latin hypercube sampling + xStart
-           set.seed(cobraSeed)
+           # set.seed(cobraSeed)    # already set above
            I <- lhs::randomLHS(initDesPoints-1,dimension)    # LHS with values uniformly in [0,1]
            #I <- lhs::randomLHS(initDesPoints,dimension)    # LHS with values uniformly in [0,1]
            for (k in 1:ncol(I)) {
@@ -631,10 +649,12 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   #   options(nloptr.show.inequality.warning = FALSE)
   # }
   
-  
   A <- I  # A contains all evaluated points
   n <- nrow(A)
-  x0 = clipLowerUpper(xStart,1)
+  #x0 = clipLowerUpper(xStart,1)  
+  #browser()
+  x0 = pmax(xStart,lower)
+  x0 = pmin(x0,upper)
   cobra<-list(fn=fn,
               #fnNOarchive=fnNOarchive,
               x0=x0,          # the initial starting point (clipped) (only diag, see also below line 861)
@@ -664,6 +684,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
               # maxViol=maxViol,
               epsilonInit=epsilonInit, 
               epsilonMax=epsilonMax, 
+              finalEpsXiZero=finalEpsXiZero,
               muGrow=muGrow,
               mu4inequality=mu4inequality,
               mu4=0,
@@ -841,14 +862,14 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
     xbest <- I[which(Fres==fbest)[1],]
     ibest <- which(Fres==fbest)[1]
   }else{
-    # if there is no feasibe point yet, take one from the points with min number of violated constraints:
+    # if there is no feasible point yet, take one from the points with min number of violated constraints:
     minNumIndex<-which(numViol==min(numViol))
     # /WK/ the folllowing lines can select pretty big fbest values which lead to a very bad pShift:
     #index<-minNumIndex[which(maxViol[minNumIndex]==min(maxViol[minNumIndex]))]
     #fbest <- Fres[index[1]]
     #xbest <- A[index[1],]
     #ibest <- index[1]
-    # /WK/ alternatve: select among the min-num-viol point the one with smallest Fres
+    # /WK/ alternative: select among the min-numViol points the one with smallest Fres
     FresMin <- Fres[minNumIndex]
     ind <- which.min(FresMin)
     index <- minNumIndex[ind]
@@ -867,7 +888,8 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   cobra$xbest<-xbest
   cobra$ibest<-ibest
   cobra$xStart = xbest    # placeholder: in cobraPhaseII xStart will be either set to xbest or a random start point
-  cobra$x0 = xbest        # the best start point after initial design
+  #/WK/2025/04/10: commented the next line out, it seems weird! (x0 should be the initial point)
+  #cobra$x0 = xbest        # the best start point after initial design
   cobra$fbestArray<-fbestArray
   cobra$xbestArray<-xbestArray
   cat("*** Starting run with seed",cobraSeed,"***\n")

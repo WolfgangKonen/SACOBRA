@@ -129,7 +129,7 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
         cgtrue =  sum(c(max(0,conTrue[-cobra$equIndex])^2,conTrue[cobra$equIndex]^2))
         #### printout, only for debugging
         if(is.na(cgtrue))print("The solution returned by refine mechanism is not defined for the objective function, please check if the given lower and upper limits are correct")
-        cat(sprintf("cg-values (before,after,true) = (%g, %g, %g)\n",cgbefore,cg$value,cgtrue))
+        #cat(sprintf("cg-values (before,after,true) = (%g, %g, %g)\n",cgbefore,cg$value,cgtrue))
         #
         # this is just more detailed constraint information, which may be inspected in browser:
         equInd = cobra$equIndex
@@ -274,12 +274,16 @@ evalReal <- function(cobra,ev1,xNew,fValue,feval,optimConv,optimTime,currentEps
       ev1$newNumPred<-length(which(newPredC > cobra$conTol)) # the same on constraint surrogates
       ev1$feasPred = c(ev1$feasPred, ev1$newNumPred == 0 ) 
       
-      if((max(0,max((ev1$xNewEval[-1])) )) > cobra$conTol){  # maximum violation
-        ev1$newMaxViol<-max(0,max((ev1$xNewEval[-1])) )  
-      }else{
-        ev1$newMaxViol<-0
-      }
-      ev1$trueMaxViol = ev1$newMaxViol   # w/o artificial band around eq constraints, trueMaxViol and newMaxViol are the same
+      maxViol = max(0,max((ev1$xNewEval[-1])) ) # maximum violation
+      # if(maxViol > cobra$conTol){  # /WK/2025/04/09: this was the earlier setting:
+      #   ev1$newMaxViol<- maxViol   # 
+      # }else{                       # set ev1$newMaxViol to 0 if it is below conTol    
+      #   ev1$newMaxViol<-0
+      # }
+      ev1$newMaxViol<- maxViol       # /WK/2025/04/09: new setting, in sync with equHandle$active-case
+      
+      ev1$trueNumViol = ev1$newNumViol   # /WK/2025/04/08: bug fix: w/o artificial band 
+      ev1$trueMaxViol = ev1$newMaxViol   # around eq constraints, trueMaxViol and newMaxViol are the same
     } # (cobra$equHandle$active)
   
   return (ev1)

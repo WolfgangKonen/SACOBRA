@@ -351,10 +351,19 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   cobra$df <- df
   
   # /WK/2025/03/24: only diagnostics: does the constraint prediction know that the solution
-  # point is feasible (at least in the later stages of the surrogates)?
-  constraintPrediction <-  interpRBF(cobra$solu,cobra$constraintSurrogates) 
-  numViolSoluPred = sum(constraintPrediction > cobra$conTol)
-  maxViolSoluPred = max(0, max(constraintPrediction-cobra$conTol))
+  # point(s) is/are feasible (at least in the later stages of the surrogates)?
+  if (is.matrix(cobra$solu)) {
+    # /WK/2025/04/12: bug fix for the case of multiple solutions
+    constraintPredVec = sapply(1:nrow(cobra$solu), function(r) {
+      interpRBF(cobra$solu[r,],cobra$constraintSurrogates)
+    })
+    numViolSoluPred = max(colSums(constraintPredVec > cobra$conTol))
+    maxViolSoluPred = max(0, max(constraintPredVec-cobra$conTol))
+  } else {
+    constraintPrediction <-  interpRBF(cobra$solu,cobra$constraintSurrogates) 
+    numViolSoluPred = sum(constraintPrediction > cobra$conTol)
+    maxViolSoluPred = max(0, max(constraintPrediction-cobra$conTol))
+  }
   
   na_for_null <- function(v) {
     return (ifelse(is.null(v),NA,v))

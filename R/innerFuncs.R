@@ -213,6 +213,7 @@ calcConstrPred <- function(x,cobra) {
     # 
     currentEps = tail(cobra$currentEps,1)
     currentMu = cobra$mu4     # normally 0. Experimental: same value as currentEps, applied to *inequalities*
+    
     equIndex = cobra$equIndex
     if (cobra$trueFuncForSurrogates){   
       constraintPrediction1<- cobra$fn(x)[-1]
@@ -234,7 +235,7 @@ calcConstrPred <- function(x,cobra) {
     } else {
       constraintPrediction <-  interpRBF(x,cobra$constraintSurrogates)+cobra$EPS^2
     }
-    # TODO 2025/04/02: should we integrage currentMu also here?
+    # TODO 2025/04/02: should we integrate currentMu also here?
     
   }
   #/WK/ Bug fix: the above lines for cobra$trueFuncForSurrogates==TRUE were missing before

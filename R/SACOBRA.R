@@ -321,7 +321,7 @@ RandomStart<-R6::R6Class("RS",
                                  } else {
                                    xStart<-runif(n=length(cobra$xbest),min=cobra$lower,max=cobra$upper)
                                  }
-                                 print(sprintf("[random_start] (%9.5f,%9.5f) at iter %d", xStart[1], xStart[2], nrow(cobra$A)))
+                                 #print(sprintf("[random_start] (%9.5f,%9.5f) at iter %d", xStart[1], xStart[2], nrow(cobra$A)))
                                  cobra$RSDONE<-c(cobra$RSDONE,"RS")
                                  #cobra$noProgressCount<-0
                                } else{
