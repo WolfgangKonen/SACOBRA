@@ -26,7 +26,7 @@
 #'The minimization step of refine mechanism is done by \code{L-BFGS-B} method in \code{optim} function from \code{stats} package.
 #'
 #' @return equHandle, a list with the following elements: 
-#'    \item{active}{  [TRUE] if set to TRUE the equality-handling (EH) technique is activated. The EH 
+#'    \item{active}{  [TRUE] if TRUE, the equality-handling (EH) technique is activated. The EH 
 #'        technique transforms each equality constraint \eqn{h(\vec{x})=0} into two inequality  
 #'        constraints \eqn{h(\vec{x})-\mu <0} and \eqn{-h(\vec{x})-\mu<0 } with an adaptively  
 #'        decaying margin \eqn{\mu}.  }
@@ -37,11 +37,13 @@
 #'    \cr \strong{TMV}: (Total Maximum Violation) takes the median of the maximum violation of the initial population
 #'    \cr \strong{EMV}: takes the median of the maximum violation of equality constraints of the initial population
 #'    \cr \strong{useGrange}: takes the average of the ranges of the equality constraint functions}
-#'    \item{epsType}{["SAexpFunc"] type of the function used to modify margin \eqn{\mu} during the optimization process 
-#'        can be one of ["SAexpFunc"|"expFunc"|"funcDim"|"funcSDim"|"Zhang"|"CONS"]. see \code{\link{modifyMu}}.}
+#'    \item{epsType}{["SAexpFunc"] type of function used to modify margin \eqn{\mu} during the optimization process. 
+#'        One out of ["SAexpFunc"|"expFunc"|"funcDim"|"funcSDim"|"Zhang"|"CONS"]. see \code{\link{modifyMu}}.}
 #'    \item{dec}{[1.5] decay factor for margin \eqn{\mu}. see \code{\link{modifyMu}}}
-#'    \item{refine}{[TRUE] enables the refine mechanism f the equality handling mechanism.}
+#'    \item{refine}{[TRUE] enables the refine mechanism for equality handling }
 #'    \item{refineMaxit}{maximum number of iterations used in the refine step. Note that the refine step runs on the surrogate models and does not impose any extra real function evaluation.}
+#'    \item{refineAlgo}{["COBYLA"] the optimizer for refine, either "COBYLA" for nloptr::cobyla with xtol_rel disabled
+#'        or "L-BFGS-B" for optimizer optim(..., method="L-BFGS-B")} 
 #' @seealso \code{\link{updateCobraEqu}}, \code{\link{modifyMu}}
 #' @export
 #'
@@ -52,8 +54,10 @@ defaultEquMu<-function(){
                     epsType="expFunc",   # expFunc SAexpFunc funcDim funcSDim Zhang CONS
                     dec=1.5,
                     refine=TRUE,
-                    refineMaxit=1000 # 100
-                  )
+                    refineMaxit=1000, # 100,
+                    refineAlgo="COBYLA",  # "L-BFGS-B",  # 
+                    refinePrint=FALSE
+  )
   return(equHandle)
 }
 
@@ -169,13 +173,15 @@ updateCobraEqu<-function(cobra,xNew){
 
 #modifyMu
 #'
-#' Modify equality margin \eqn{\mu}
+#' Modify equality margin \eqn{\mu}.
+#' 
+#' Called by adjustMargins (which is called from three places in cobraPhaseII).
 #' 
 #' @param   Cfeas       counter feasible iterates
 #' @param   Cinfeas     counter infeasible iterates
 #' @param   Tfeas       threshold counts
 #' @param   currentEps  current value for \eqn{\mu}
-#' @param   cobra       list of class COBRA
+#' @param   cobra       list of class COBRA, we need here cobra$currentEps and cobra$equHandle
 #' 
 #' @return  \code{currentEps}, the modified value for \eqn{\mu}
 #' 
@@ -188,13 +194,12 @@ modifyMu<-function(Cfeas,Cinfeas,Tfeas,currentEps,cobra){
     }
   }
   
-  alg<-cobra$equHandle$epsType
-  switch(alg,
-         expFunc={ # old funcCon function which is refered in equHandle-test file
+  switch(cobra$equHandle$epsType,
+         expFunc={   # exponentially decaying func
            #currentEps<-max(tail(cobra$currentEps,1)/(cobra$equHandle$dec), cobra$equHandle$equEpsFinal)
            currentEps<-max(currentEps/(cobra$equHandle$dec), cobra$equHandle$equEpsFinal)
          },
-         SAexpFunc={ # Self-Adjsuting expFunc
+         SAexpFunc={ # self-adjusting expFunc
            currentEps<-max(mean(c(tail(cobra$currentEps,1)/(cobra$equHandle$dec),cobra$trueMaxViol[cobra$ibest]*cobra$finMarginCoef)), cobra$equHandle$equEpsFinal)
          },
          funcDim={
@@ -204,7 +209,9 @@ modifyMu<-function(Cfeas,Cinfeas,Tfeas,currentEps,cobra){
            currentEps<-(cobra$currentEps[1]*(1/cobra$equHandle$dec)^((nrow(cobra$A)-3*ncol(cobra$A))/Tfeas))+cobra$equHandle$equEpsFinal
          },
          Zhang={
-           currentEps<-max(currentEps*(1-(length(cobra$currentFeas)/nrow(cobra$A))),cobra$equHandle$equEpsFinal)
+           # currentEps<-max(currentEps*(1-(length(cobra$currentFeas)/nrow(cobra$A))),cobra$equHandle$equEpsFinal)
+           # /WK/202504/26: questionable: length(cobra$currentFeas) is always 1. A better choice:
+           currentEps<-max(currentEps*(1-length(cobra$ev1$feas)/nrow(cobra$A) ), cobra$equHandle$equEpsFinal)
          },
          CONS={
            currentEps<-cobra$equHandle$equEpsFinal
@@ -215,3 +222,5 @@ modifyMu<-function(Cfeas,Cinfeas,Tfeas,currentEps,cobra){
   
   return(currentEps)
 }
+
+

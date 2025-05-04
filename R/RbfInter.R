@@ -57,8 +57,8 @@ svdInv <- function(M) {
 }
 
 
-#Internal function train RBF function
-#After Phi matrix being built in trainCubic, trainGaussian and trainMQ functions, 
+#Internal function to train RBFs
+#After matrix phi is built in trainCubicRBF, trainGaussianRBF or trainMQRBF functions, 
 #it will be passed to this function to become augmented and find the RBF model parameters 
 #by inverting the augmented matrix  
 # 
@@ -70,6 +70,8 @@ trainRBF<-function(phi,U,ptail,squares,xp,type,DEBUG2,width=NA,rho=0){
   pMat<-NULL #polynomial matrix
   regMat<-NULL
   
+  phi = phi + npts*diag(nrow(phi))*rho    # /WK/2025/04/16: new formula (the formula in [Carr01] has a "-" instead
+                                          # of the "+", but we find empirically better (smoother) results with "+")
   if(!ptail && !squares){
     M = phi
   }else{
@@ -80,10 +82,12 @@ trainRBF<-function(phi,U,ptail,squares,xp,type,DEBUG2,width=NA,rho=0){
     nMat=matrix(0,d2,d2)                # matrix of zeros
     M<-cbind(phi,pMat)
     
-      QQ=t(pMat)
-      M<-rbind(M,cbind(QQ,nMat)) 
-      M<-M+diag(nrow(M))*rho^2
-  }
+    QQ=t(pMat)
+    M<-rbind(M,cbind(QQ,nMat)) 
+    #M<-M+diag(nrow(M))*rho^2  # /WK/2025/04/16: questionable, Konen2015-RBF-pitfalls.pdf, p. 28, lists another
+                               # formula! And smoothing RBFs should also apply in case !ptail && !squares.
+                               # --> now we use the formula above that changes phi for both cases.
+  }                                   
   
   invM = svdInv(M)
   rhs <- calcRHS(U,d2) 
@@ -114,7 +118,8 @@ trainRBF<-function(phi,U,ptail,squares,xp,type,DEBUG2,width=NA,rho=0){
                    ,npts=nrow(xp)
                    ,ptail=ptail
                    ,squares=squares
-                   ,type=type,width=width)  
+                   ,type=type
+                   ,rho=rho,width=width)  
   if (DEBUG2) {
     rbf.model$M = M
     rbf.model$rhs = rhs
@@ -129,7 +134,8 @@ trainRBF<-function(phi,U,ptail,squares,xp,type,DEBUG2,width=NA,rho=0){
 
 
 #----------------------------------------------------------------------------------
-#' Fit cubic RBF interpolation to training data X for d>1.
+#' Fit cubic RBF interpolation to training data X for d>=1.
+#' It works for d=1, if newdata is passed in as *matrix* with d columns.
 #'
 #' The model at a point \eqn{z=(z_1,...,z_d)} is fitted using n sample points \eqn{x_1, ..., x_n} 
 #' \cr
@@ -182,14 +188,15 @@ trainCubicRBF <- function(xp, U, ptail=TRUE, squares=FALSE, rho=0.0,DEBUG2=FALSE
 
   edist=as.matrix(stats::dist(xp,upper=T))         # euclidean distance matrix
   phi=edist*edist*edist                     # cubic RBF (npts x npts matrix)
-                                            
+  
   rbf.model<-trainRBF(phi,U,ptail,squares,xp,type="CUBIC",DEBUG2,width=NA,rho=rho)
   
   return(rbf.model)
 }
 
 #----------------------------------------------------------------------------------
-#' Fit Gaussian RBF model to training data for d>1.
+#' Fit Gaussian RBF model to training data for d>=1.
+#' It works for d=1, if newdata is passed in as *matrix* with d columns.
 #' 
 #' The model for a point \eqn{z=(z_1,...,z_d)} is fitted using n sample points \eqn{x_1, ..., x_n} 
 #' \cr
@@ -314,7 +321,8 @@ trainGaussRBF <- function(xp, U, ptail=TRUE, squares=FALSE,
 }
 
 #----------------------------------------------------------------------------------
-#' Fit multiquadric RBF model to training data for d>1.
+#' Fit multiquadric RBF model to training data for d>=1.
+#' It works for d=1, if newdata is passed in as *matrix* with d columns.
 #'
 #' The model for a point \eqn{\vec{z}=(z_1,...,z_d) \in \mathbf{R}^d} is fitted using n sample points \eqn{\vec{x}_1, ..., \vec{x}_n \in \mathbf{R}^d} 
 #' \cr
@@ -439,7 +447,8 @@ trainMQRBF <- function(xp, U, ptail=TRUE, squares=FALSE,
 
 
 #----------------------------------------------------------------------------------
-#' Apply cubic or MQ or Gaussian RBF interpolation to single data point for d>1.
+#' Apply cubic or MQ or Gaussian RBF interpolation to single data point for d>=1.
+#' It works for d=1, if newdata is passed in as *matrix* with d columns.
 #' 
 #' @param x         vector holding a point of dimension d
 #' @param rbf.model trained RBF model (or set of models), see \code{\link{trainCubicRBF}} 
@@ -454,6 +463,9 @@ trainMQRBF <- function(xp, U, ptail=TRUE, squares=FALSE,
 #----------------------------------------------------------------------------------
 interpRBF <- function(x,rbf.model) {
   #testit::assert("non-conform",length(x)==ncol(rbf.model$xp))
+  # if (!any(class(rbf.model)=="RBFinter")) {
+  #   browser()
+  # }
   testit::assert("rbf.model is not of class RBFinter",any(class(rbf.model)=="RBFinter"))
   if (length(x)!=ncol(rbf.model$xp)) {
     cat("problem in interpRBF\n")
@@ -522,7 +534,8 @@ interpRBF <- function(x,rbf.model) {
 #----------------------------------------------------------------------------------
 #' Apply cubic or Gaussian or MQ RBF interpolation
 #' 
-#' Apply cubic or Gaussian or MQ RBF interpolation to a set of new data points for d>1.
+#' Apply cubic or Gaussian or MQ RBF interpolation to a set of new data points for d>=1.
+#' It works for d=1, if newdata is passed in as *matrix* with d columns.
 #' 
 #' @param rbf.model trained RBF model (or set of models), see \code{\link{trainCubicRBF}} 
 #'                  or \code{\link{trainGaussRBF}}

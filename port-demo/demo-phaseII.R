@@ -89,6 +89,9 @@ demo_RS_EPS <- function() {
     
     print(cobra$df$RS)
     print(cobra$df2$EPS)
+    print(cobra$A[6:8,])
+    print(cobra$A[20])
+    print(getXbest(cobra))
   }
   
   return (cobra)

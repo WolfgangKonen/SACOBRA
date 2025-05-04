@@ -78,6 +78,7 @@
 #'                      factor applied to each width \eqn{\sigma} 
 #' @param GaussRule     ["One"] only relevant for Gaussian RBF model, see \code{\link{trainGaussRBF}}                                     
 #' @param RBFrho        [0.0] experimental: 0: interpolating, > 0, approximating (spline-like) Gaussian RBFs
+#' @param RBFrhoDec     [1.0] experimental: decrementation factor for \code{RBFrho}
 #' @param trueFuncForSurrogates  [FALSE] if TRUE, use the true (constraint & fitness) functions
 #'                      instead of surrogates (only for debug analysis)
 #' @param equHandle     [\code{\link{defaultEquMu}()}] list with of parameters for            
@@ -177,7 +178,8 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
                       seqOptimizer="COBYLA", seqFeval=1000, seqTol=1e-6, 
                       DOSAC=1, sac=defaultSAC(DOSAC), 
                       repairInfeas=FALSE, ri=defaultRI(),
-                      RBFmodel="cubic", RBFwidth=-1,GaussRule="One",widthFactor=1.0,RBFrho=0.0,
+                      RBFmodel="cubic", RBFwidth=-1,GaussRule="One",widthFactor=1.0,
+                      RBFrho=0.0, RBFrhoDec=1.0,
                       ptail=TRUE, squares=TRUE, conTol=0.0,
                       MS=defaultMS(),
                       equHandle=defaultEquMu(),
@@ -203,7 +205,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   originalSolu <- solu
   phase<-"init"
 
-  sac$aDRC = FALSE  # temp
+  #sac$aDRC = FALSE  # temp
   set.seed(cobraSeed)        # moved up here (before potential xStart generation)
   dimension<-length(lower)         # number of parameters (was wrongly 'length(xStart)' before)
   
@@ -294,7 +296,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   # helper for switch(initDesign): evaluate random solutions in I with fn
   randomResultsFactory <- function(I,fn,dimension) {
     sapply(1:nrow(I), function(i){
-      verboseprint(verbose=1,important=TRUE,sprintf("iteration %03d: ",i))
+      verboseprint(verbose=1,important=FALSE,sprintf("iteration %03d: ",i))
       x<-I[i,]   
       res<-fn(x)
       return(res)
@@ -304,7 +306,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   randomResultsFactory2 <- function(I, fn, dimension) {
     randomResults = matrix(0,nConstraints+1,initDesPoints)
     for (i in 1:initDesPoints) {
-      verboseprint(verbose=1,important=TRUE,sprintf("iteration %03d: ",i))
+      verboseprint(verbose=1,important=FALSE,sprintf("iteration %03d: ",i))
       x<-I[i,]   
       randomResults[,i] = fn(x)
     }
@@ -390,7 +392,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
            if (initDesFactory2) {
              randomResults = matrix(0,nConstraints+1,initDesPoints)
              for (i in 1:initDesPoints) {
-               verboseprint(verbose=1,important=TRUE,sprintf("iteration %03d: ",i))
+               verboseprint(verbose=1,important=FALSE,sprintf("iteration %03d: ",i))
                x<-I[i,]   
                randomResults[,i] = fn(x)
              }
@@ -708,6 +710,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
               RBFmodel=RBFmodel,
               RBFwidth=RBFwidth,
               RBFrho=RBFrho,
+              RBFrhoDec=RBFrhoDec,
               RULE=GaussRule,
               widthFactor=widthFactor,
               sigmaD=sigmaD,
@@ -749,7 +752,7 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
               CONSTRAINED=CONSTRAINED
   )
   cobra$equIndex<-which(colnames(Gres)=="equ")
-  
+
   ## /SB/ 21.09.2015
   cobra$DEBUG_RBF <- setOpts(cobra$DEBUG_RBF,defaultDebugRBF())
   #cobra$LES <- setOpts(cobra$LES,defaultLES(cobra))
@@ -809,7 +812,6 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
   })
   trueMaxViol<-maxViol
   
-  
   #SB: related to handling equality 02.10.2015
   currentEps<-NA
   equIndex<-which(colnames(Gres)=="equ")
@@ -829,13 +831,24 @@ cobraInit <- function(xStart, fn, fName, lower, upper, feval,
       return(y)
     })
     
-    switch(cobra$equHandle$initType,
-           useGrange={currentEps<-cobra$GrangeEqu},
-           TAV={tempG[tempG<0]<-0;currentEps<-median(apply(tempG,1,sum))},
-           TMV={currentEps<-median(maxViol)},
-           EMV={currentEps<-median(apply(tempG[,cobra$equIndex],1,max))}
-    ) 
+    sw = switch(cobra$equHandle$initType,
+               useGrange={currentEps<-cobra$GrangeEqu},
+               TAV={tempG[tempG<0]<-0;currentEps<-median(apply(tempG,1,sum))},
+               #TMV={currentEps<-median(maxViol)},
+               TMV={currentEps<-median(trueMaxViol)},
+               # bug fix WK/2025/04/26 for "TMV": should be based on trueMaxViol for mixed
+               # eq-inequ-constraints, NOT on earlier maxViol calculated under inequality assumption (!)
+               EMV={currentEps<-median(apply(as.matrix(tempG[,cobra$equIndex]),1,max))},
+               # bug fix WK/2025/04/26 for "EMV":
+               # as.matrix() is needed for the case of only 1 equality constraint. 
+               # as.matrix() transforms the vector (d) back to matrix (d,1) (with d=nrow(tempG))
+               "InvalidInitType"
+               ) 
+    testit::assert(sprintf("cobraInit: Wrong value %s for equHandle$initType",cobra$equHandle$initType),
+                   sw!="InvalidInitType")
     currentEps<-max(currentEps,cobra$equHandle$equEpsFinal)
+    if (cobra$equHandle$epsType == "CONS")
+      currentEps = cobra$equHandle$equEpsFinal   # /WK/2025/05/01: bug fix: "CONS" overrides initType
     cobra$currentEps<-rep(currentEps,initDesPoints)
     tempG[,cobra$equIndex] = tempG[,cobra$equIndex] - currentEps  # /WK/2025/03/23: bug fix
     maxViol<-sapply(1:initDesPoints , function(i){

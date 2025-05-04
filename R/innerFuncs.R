@@ -145,7 +145,6 @@ gCOBRA <- function(x,cobra) {
   # h[1] <- sum(subC)*cobra$drFactor
   h[1] <- sum(subC)
 
-  # browser()
   if(cobra$CONSTRAINED)constraintPrediction <- calcConstrPred(x,cobra);
   DBG=FALSE
   if (DBG & h[1]>0) {
@@ -208,8 +207,8 @@ calcConstrPred <- function(x,cobra) {
     #
     #     ( g_i(x), h_j(x) - mu, - h_j(x) - mu ) + eps^2
     #
-    # with mu=currentEps, eps=cobra$EPS, which should be in all components <= 0 in order to fulfill
-    # the constraints
+    # with mu=currentEps, eps=cobra$EPS. This vector should be in all components
+    # <= 0 in order to fulfill the constraints
     # 
     currentEps = tail(cobra$currentEps,1)
     currentMu = cobra$mu4     # normally 0. Experimental: same value as currentEps, applied to *inequalities*

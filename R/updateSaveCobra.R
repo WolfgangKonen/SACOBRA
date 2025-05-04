@@ -282,6 +282,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
                      nViolations=cobra$numViol,
                      trueNViol=cobra$trueNumViol,
                      maxViolation=cobra$maxViol,
+                     trueMaxViol=cobra$trueMaxViol,
                      FEval=feval, 
                      Best=cobra$fbestArray,
                      optimizer=rep(cobra$seqOptimizer,length(cobra$Fres)),
@@ -301,13 +302,13 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     else
       realfeval<-cobra$df$realfeval
     
-    
     df <- data.frame(y=cobra$Fres, 
                      predY=predY,           # surrogate fitness
                      predSolu=df_predSolu,
                      feasible=T,
                      FEval=feval, 
-                     realfeval=c(realfeval,nrow(get("ARCHIVE",envir=intern.archive.env))),
+                     #realfeval=c(realfeval,nrow(get("ARCHIVE",envir=intern.archive.env))),
+                     realfeval=feval,   # /WK/2025/04/17/ temporary, use of intern.archive.env not clear
                      Best=cobra$fbestArray,
                      optimizer=rep(cobra$seqOptimizer,length(cobra$Fres)),
                      optimizationTime=ev1$optimizationTime,
@@ -352,17 +353,22 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
   
   # /WK/2025/03/24: only diagnostics: does the constraint prediction know that the solution
   # point(s) is/are feasible (at least in the later stages of the surrogates)?
-  if (is.matrix(cobra$solu)) {
-    # /WK/2025/04/12: bug fix for the case of multiple solutions
-    constraintPredVec = sapply(1:nrow(cobra$solu), function(r) {
-      interpRBF(cobra$solu[r,],cobra$constraintSurrogates)
-    })
-    numViolSoluPred = max(colSums(constraintPredVec > cobra$conTol))
-    maxViolSoluPred = max(0, max(constraintPredVec-cobra$conTol))
+  if (cobra$nConstraints==0 || is.null(cobra$solu)) {
+    numViolSoluPred = 0
+    maxViolSoluPred = 0
   } else {
-    constraintPrediction <-  interpRBF(cobra$solu,cobra$constraintSurrogates) 
-    numViolSoluPred = sum(constraintPrediction > cobra$conTol)
-    maxViolSoluPred = max(0, max(constraintPrediction-cobra$conTol))
+    if (is.matrix(cobra$solu)) {
+      # /WK/2025/04/12: bug fix for the case of multiple solutions
+      constraintPredVec = sapply(1:nrow(cobra$solu), function(r) {
+        interpRBF(cobra$solu[r,],cobra$constraintSurrogates)
+      })
+      numViolSoluPred = max(colSums(constraintPredVec > cobra$conTol))
+      maxViolSoluPred = max(0, max(constraintPredVec-cobra$conTol))
+    } else {
+      constraintPrediction <-  interpRBF(cobra$solu,cobra$constraintSurrogates) 
+      numViolSoluPred = sum(constraintPrediction > cobra$conTol)
+      maxViolSoluPred = max(0, max(constraintPrediction-cobra$conTol))
+    }
   }
   
   na_for_null <- function(v) {
@@ -377,6 +383,7 @@ updateSaveCobra <- function(cobra,ev1,subMin,sigmaD,penaF,gama,EPS,
     sigmaD=sigmaD[1],
     penaF=penaF[1],
     XI=gama,
+    rho=cobra$RBFrho,
     fBest=tail(df$Best,1)
     , EPS=EPS[1]
     , currentEps= na_for_null(tail(cobra$currentEps,1))

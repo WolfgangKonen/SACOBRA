@@ -1,7 +1,7 @@
 solve_G03 <- function(cobraSeed, dimension=20) {
   G03<-COP$new("G03", dimension)
   
-  cobra <- cobraInit(xStart=G03$xStart, fn=G03$fn, fName=G03$name, 
+  cobra <- cobraInit(xStart=G03$x0, fn=G03$fn, fName=G03$name, 
                      lower=G03$lower, upper=G03$upper, feval=250,
                      solu=as.vector(G03$solu),   
                      initDesign = "LHS", cobraSeed=cobraSeed, conTol=0)
@@ -20,12 +20,14 @@ solve_G03 <- function(cobraSeed, dimension=20) {
 solve_G05 <- function(cobraSeed) {
   G05<-COP$new("G05")
   
-  cobra <- cobraInit(xStart=G05$xStart, fn=G05$fn, fName=G05$name, 
+  cobra <- cobraInit(xStart=G05$x0, fn=G05$fn, fName=G05$name, 
                      lower=G05$lower, upper=G05$upper, feval=70,
+                     finalEpsXiZero = TRUE,
                      solu=as.vector(G05$solu),   
-                     initDesign = "LHS", cobraSeed=cobraSeed, conTol=0)
+                     initDesign = "RAND_REP", initDesPoints = 15,  cobraSeed=cobraSeed, conTol=0)
   cobra$squares = T
-
+  browser()
+  
   cobra <- cobraPhaseII(cobra)
   
   ## The true solution is at G05$solu = c(679.9453175, 1026.0671351, 0.1188764, -0.3962336)
@@ -36,16 +38,17 @@ solve_G05 <- function(cobraSeed) {
   return (cobra)
 }
 
-solve_G06 <- function(cobraSeed) {
+solve_G06_R <- function(cobraSeed) {
   G06<-COP$new("G06")
+  idp = 5
   
-  cobra <- cobraInit(xStart=G06$xStart, fn=G06$fn, fName=G06$name, 
-                     lower=G06$lower, upper=G06$upper, feval=80,
+  cobra <- cobraInit(xStart=G06$x0, fn=G06$fn, fName=G06$name, squares=F,
+                     lower=G06$lower, upper=G06$upper, feval=40,
                      #epsilonInit = 0.0, epsilonMax = 0.0,
                      finalEpsXiZero = TRUE,
                      conTol = 1e-7,
                      solu=as.vector(G06$solu),   
-                     initDesign = "LHS", cobraSeed=cobraSeed)
+                     initDesign = "RAND_REP", initDesPoints=idp, cobraSeed=cobraSeed)
   cobra$squares = T
   # cobra$sac$RS = T    # temporarily, to check equivalence to Python side
   # cobra$sac$RS_rep = T
@@ -60,10 +63,34 @@ solve_G06 <- function(cobraSeed) {
   return (cobra)
 }
 
+solve_G06 <- function(cobraSeed) {
+  G06<-COP$new("G06")
+  
+  cobra <- cobraInit(xStart=G06$x0, fn=G06$fn, fName=G06$name, 
+                     lower=G06$lower, upper=G06$upper, feval=80,
+                     #epsilonInit = 0.0, epsilonMax = 0.0,
+                     finalEpsXiZero = FALSE,
+                     conTol = 1e-7,
+                     solu=as.vector(G06$solu),   
+                     initDesign = "LHS", cobraSeed=cobraSeed)
+  cobra$squares = F
+  cobra$sac$RS = T    # temporarily, to check equivalence to Python side
+  cobra$sac$RS_rep = T
+  
+  cobra <- cobraPhaseII(cobra)
+  
+  ## The true solution is at G06$solu = c(14.0950, 0.84296)
+  ## with objective -6961.814 
+  ## The solution found by SACOBRA: 14.0950000  0.8429608
+  ## with objective -6961.814     (error 2e-4 or smaller)
+  cobra <- print_and_plot(cobra,c(1e-7,1e-0))
+  return (cobra)
+}
+
 solve_G11 <- function(cobraSeed) {
   G11<-COP$new("G11")
   
-  cobra <- cobraInit(xStart=G11$xStart, fn=G11$fn, fName=G11$name, 
+  cobra <- cobraInit(xStart=G11$x0, fn=G11$fn, fName=G11$name, 
                      lower=G11$lower, upper=G11$upper, feval=70,
                      solu=as.vector(G11$solu),   
                      initDesign = "LHS", cobraSeed=cobraSeed, conTol=0)
@@ -84,13 +111,14 @@ solve_G13 <- function(cobraSeed) {
   G13<-COP$new("G13")
   
   cobra <- cobraInit(#xStart=G13$solu[1,]+0.01, fn=G13$fn, fName=G13$name, 
-                     xStart=G13$xStart, fn=G13$fn, fName=G13$name, 
-                     lower=G13$lower, upper=G13$upper, feval=400,
+                     xStart=G13$x0, fn=G13$fn, fName=G13$name, 
+                     lower=G13$lower, upper=G13$upper, feval=500,
                      epsilonInit = 0.0, epsilonMax = 0.0,
-                     solu=as.matrix(G13$solu),   
-                     initDesign = "LHS", initDesPoints = 100, cobraSeed=cobraSeed, conTol=1e-6)
+                     RBFrho = 2.5, RBFrhoDec = 2.0,
+                     solu=as.matrix(G13$solu),  conTol=1e-6,  # conTol=0, #
+                     initDesign = "LHS", initDesPoints = 100, cobraSeed=cobraSeed)
   cobra$squares = T
-  cobra$equHandle$equEpsFinal = 2e-5 # 1e-7
+  cobra$equHandle$equEpsFinal = 1e-7 # 2e-5 # 1e-7 # 
   cobra$muGrow = 100
   
   cobra <- cobraPhaseII(cobra)
@@ -103,12 +131,13 @@ solve_G13 <- function(cobraSeed) {
   return (cobra)
 }
 
-solve_G24 <- function() {
+solve_G24 <- function(cobraSeed) {
   G24<-COP$new("G24")
   
   cobra <- cobraInit(xStart=G24$lower, fName=G24$name, 
+                     fn=G24$fn, lower=G24$lower, upper=G24$upper, 
                      solu=as.vector(G24$solu),   
-                     fn=G24$fn, lower=G24$lower, upper=G24$upper, feval=45)
+                     cobraSeed=cobraSeed, feval=45)
 
   cobra <- cobraPhaseII(cobra)
   
@@ -121,11 +150,13 @@ solve_G24 <- function() {
 }
 
 print_and_plot <- function(cobra,ylim) {
+  testit::assert("[print_and_plot] cobra$solu is NULL", !is.null(cobra$solu))
+  cat("xbest = \n")
   print(getXbest(cobra))          
-  print(getFbest(cobra))     
+  cat(sprintf("fbest = %12.6e\n",getFbest(cobra)))
   # if there are multiple solutions, they must have all the same objective value obj which we infer from first solution:
   firstSolu <- ifelse (is.matrix(solu), solu[1,], solu)
-  obj <- cobra$fn(firstSolu)[1];      
+  obj <- cobra$fn(firstSolu)[1];   
   fn_solu = ifelse(is.matrix(cobra$solu),cobra$fn(cobra$solu[1,])[1],cobra$fn(cobra$solu)[1])
   cobra$errGCOP = cobra$df$Best-fn_solu
   plot(abs(cobra$errGCOP),log="y",type="l", ylab="error",xlab="iteration",
@@ -133,27 +164,28 @@ print_and_plot <- function(cobra,ylim) {
   return (cobra)
 }
 
-multi_Gfnc <- function(gfnc, runs, cobraSeed) {
+multi_gfnc <- function(gfnc, runs, cobraSeed) {
   # consecutive runs to collect some statistics:
   ptm <- proc.time()
-  fin_err_list = c()
+  finErrList = c()
   for (run in 1:runs) {
     cobra = gfnc(cobraSeed+run)
-    fin_err = tail(cobra$errGCOP,1)
-    fin_err_list = c(fin_err_list, fin_err)
-    cat(sprintf("final error: %e\n", fin_err))
+    finErr = tail(cobra$errGCOP,1)
+    finErrList = c(finErrList, finErr)
+    cat(sprintf("final error: %e\n", finErr))
   }
   print(sprintf("%10.5f %s",(proc.time()-ptm)[3]/runs,"sec per run"))
-  print(summary(abs(fin_err_list)))
-  cobra$finErrList = fin_err_list
+  print(summary(abs(finErrList)))
+  cobra$finErrList = finErrList
   return (cobra)
 }
 
-cobra = solve_G03(42, 5)
-#cobra = solve_G05(42)
+#cobra = solve_G03(42, 5)
+cobra = solve_G05(42)
+#cobra = solve_G06_R(42)
 #cobra = solve_G06(42)
 #cobra = solve_G11(42)
-#cobra = solve_G13(391)
-#cobra = solve_G24()
-#cobra = multi_Gfnc(solve_G03, 10, 390)
+#cobra = solve_G13(385)
+#cobra = solve_G24(42)
+#cobra = multi_gfnc(solve_G05, 6, 390)
 

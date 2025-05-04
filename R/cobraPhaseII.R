@@ -318,7 +318,10 @@ cobraPhaseII <- function(cobra){
   
   
   # adjust margins (EPS)
-  # may change EPS, currentEps, Cfeas, and Cinfeas on the global level of cobraPhaseII
+  #
+  # May change EPS, currentEps, Cfeas, and Cinfeas on the global level of cobraPhaseII.
+  #
+  # Called from three places in cobraPhaseII, always after the corresponding updateSaveCobra.
   #
   adjustMargins <- function(Cfeas,Tfeas,Cinfeas,Tinfeas,EPS,epsMax,currentEps) {
     if(Cfeas >= Tfeas){
@@ -343,6 +346,8 @@ cobraPhaseII <- function(cobra){
       # cat("after modifyMu: retval: ",retval,"\n")
       currentEps <<- retval
     }
+    
+    cobra$RBFrho <<- cobra$RBFrho/cobra$RBFrhoDec
   }
 
 
@@ -385,8 +390,8 @@ cobraPhaseII <- function(cobra){
     
     #browser()
     #print(cobra$xbest+1)
-    fp1 = interpRBF(cobra$xbest+1, cobra$fitnessSurrogate)
-    gp1 = interpRBF(cobra$xbest+1, cobra$constraintSurrogates)
+    if (!is.null(cobra$fitnessSurrogate)) fp1 = interpRBF(cobra$xbest+1, cobra$fitnessSurrogate)
+    if (!is.null(cobra$constraintSurrogates)) gp1 = interpRBF(cobra$xbest+1, cobra$constraintSurrogates)
     
     if (cobra$mu4inequality) {
       # The internal parameter cobra$mu4 (will become currentMu in innerfuncs.R) is normally 0. 
@@ -401,6 +406,7 @@ cobraPhaseII <- function(cobra){
     # STEP6.1b: whitening transformation = CA                #
     ##########################################################
     if(cobra$CA$active && any(cobra$CA$ITER<=nrow(cobra$A))){
+      browser()
       cobra$TFlag<-T  #transformation flag
       VALIDTRANSORFMATION<-T
       
@@ -616,12 +622,12 @@ cobraPhaseII <- function(cobra){
     dl = distLine(xNew,cobra$A)
     dl_thresh = 1e-7
     ind = which(dl < dl_thresh)
-    if (length(ind)>0 && gama>0) {
-      msg = sprintf("WARNING in cobraPhaseII, iter %d: dist(xNew, cobra$A[%d,])<%.0e (gama=%.4f). %s", 
-                    nrow(cobra$A)+1, tail(ind,1), dl_thresh, gama, "Consider using a different seqOptimizer.")
-      cat(msg,"\n")
-      warning(msg)
-    }
+    # if (length(ind)>0 && gama>0) {
+    #   msg = sprintf("WARNING in cobraPhaseII, iter %d: dist(xNew, cobra$A[%d,])<%.0e (gama=%.4f). %s", 
+    #                 nrow(cobra$A)+1, tail(ind,1), dl_thresh, gama, "Consider using a different seqOptimizer.")
+    #   cat(msg,"\n")
+    #   warning(msg)
+    # }
     
     ##########################################################
     # STEP6.4: Evaluate real functions                       #

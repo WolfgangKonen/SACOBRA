@@ -22,7 +22,7 @@
 #' @field upper     upper boundary of the problem
 #' @field fn        the COP function which can be passed to SACOBRA. (see \code{fn} description in \code{\link{cobraInit}})
 #' @field nConstraints number of constraints
-#' @field xStart    the suggested optimization starting point, may be \code{NA} in some cases.
+#' @field x0    the suggested optimization starting point, may be \code{NA} in some cases.
 #' @field solu      the best known solution, (only for diagnostics purposes)
 #' @field info      information about the problem
 #'   
@@ -73,7 +73,7 @@ COP<-R6::R6Class("COP",
                              upper=NA,
                              fn=NA,
                              nConstraints=NA,
-                             xStart=NA,
+                             x0=NA,
                              solu=NA,
                              info=NA,
                              #' @description
@@ -149,7 +149,7 @@ COP<-R6::R6Class("COP",
                      self$upper=c(rep(1,9),rep(100,3),1)
                      self$nConstraints=9
                      self$solu=c(rep(1,9),rep(3,3),1)  
-                     self$xStart=rep(0,self$dimension) 
+                     self$x0=rep(0,self$dimension) 
                    },
                    callG02=function(d){
                      d<-self$dimension
@@ -218,7 +218,7 @@ COP<-R6::R6Class("COP",
                                   29.99525602568341398,
                                   44.99999999847009491,
                                   36.77581290640451783)
-                     self$xStart=c(runif(1,min=78,max=102), #x1
+                     self$x0=c(runif(1,min=78,max=102), #x1
                                    runif(1,min=33,max=45),  #x2
                                    runif(3,min=27,max=45)) 
                    },
@@ -245,7 +245,7 @@ COP<-R6::R6Class("COP",
                                          1026.06713513571594376,
                                          0.11887636617838561,
                                          -0.39623355240329272)  
-                     self$xStart=c(runif(2,min=0,max=1200), #x1 , x2
+                     self$x0=c(runif(2,min=0,max=1200), #x1 , x2
                                    runif(2,min=-0.55,max=0.55)) #x3,x4
                    },
                    callG06=function(){
@@ -263,7 +263,7 @@ COP<-R6::R6Class("COP",
                      self$upper=rep(100,self$dimension)
                      self$nConstraints=2
                      self$solu=c(14.095,(5 - sqrt(100-(14.095-5)^2)))
-                     self$xStart=c(20.1,5.84) 
+                     self$x0=c(20.1,5.84) 
                    },
                    callG07=function(){
                      self$fn=function(x){
@@ -297,7 +297,7 @@ COP<-R6::R6Class("COP",
                                    9.828728107011,
                                    8.280094195305, 
                                    8.375923511901 );
-                     self$xStart=runif(self$dimension,min=self$lower,max=self$upper)  
+                     self$x0=runif(self$dimension,min=self$lower,max=self$upper)  
                    },
                    callG08=function(){
                      self$fn=function(x){
@@ -315,7 +315,7 @@ COP<-R6::R6Class("COP",
                      self$upper=rep(10,self$dimension)
                      self$nConstraints=2
                      self$solu=c(1.2279713,4.2453733)  
-                     self$xStart=NA 
+                     self$x0=NA 
                    },
                    callG09=function(){
                      self$fn=function(x){
@@ -341,7 +341,7 @@ COP<-R6::R6Class("COP",
                                          -0.62448707583702823,
                                          1.03813092302119347,
                                          1.59422663221959926);
-                     self$xStart=NA
+                     self$x0=NA
                    },
                    callG10=function(){
                      self$fn=function(x){
@@ -371,7 +371,7 @@ COP<-R6::R6Class("COP",
                                  217.98340973906758,
                                  286.41569858295981,
                                  395.60089165381908); 
-                     self$xStart=c(rep(1001,3),rep(100,self$dimension-3))  
+                     self$x0=c(rep(1001,3),rep(100,self$dimension-3))  
                    },
                    callG11=function(){
                      self$fn=function(x){
@@ -389,7 +389,7 @@ COP<-R6::R6Class("COP",
                      self$upper=c(1,1)
                      self$nConstraints=1
                      self$solu=c(-sqrt(0.5),0.5)
-                     self$xStart=NA
+                     self$x0=NA
                    },
                    callG12=function(){
                      self$fn=function(x){
@@ -416,7 +416,7 @@ COP<-R6::R6Class("COP",
                      self$upper=rep(10,self$dimension)
                      self$nConstraints=1
                      self$solu=c(5,5,5)
-                     self$xStart= NA
+                     self$x0= NA
                    },
                    callG13=function(){
                      self$fn=function(x){
@@ -442,7 +442,7 @@ COP<-R6::R6Class("COP",
                      solu<-rbind(solu,c(solu0[1:2],-solu0[3],+solu0[4],-solu0[5]))
                      solu<-rbind(solu,c(solu0[1:2],-solu0[3],-solu0[4],+solu0[5]))
                      self$solu=solu
-                     self$xStart=NA 
+                     self$x0=NA 
                      self$info="Please note that G13 has multiple global optima, all stored in solu"
                    },
                    callG14=function(){
@@ -467,7 +467,7 @@ COP<-R6::R6Class("COP",
                                  0.00141433931889084, 0.485293636780388, 0.000693183051556082,
                                  0.0274052040687766,
                                  0.0179509660214818, 0.0373268186859717, 0.0968844604336845);
-                     self$xStart=NA 
+                     self$x0=NA 
                    },
                    callG15=function(){
                      self$fn=function(x){
@@ -485,7 +485,7 @@ COP<-R6::R6Class("COP",
                      self$upper=rep(10,self$dimension)
                      self$nConstraints=2
                      self$solu=c(3.51212812611795133,0.216987510429556135, 3.55217854929179921)  
-                     self$xStart=NA  
+                     self$x0=NA  
                    },
                    callG16=function(){
                      self$fn=function(x){
@@ -588,7 +588,7 @@ COP<-R6::R6Class("COP",
                      self$upper=c(906.3855,288.88,134.75,287.0966,84.1988)
                      self$nConstraints=38
                      self$solu=c(705.17454,  68.60000, 102.90000 ,282.32493,  37.58412); 
-                     self$xStart=NA 
+                     self$x0=NA 
                    },
                    callG17=function(){
                      self$fn=function(x){
@@ -624,7 +624,7 @@ COP<-R6::R6Class("COP",
                      self$nConstraints=4
                      self$solu=c(201.784467214523659, 99.9999999999999005,
                                  383.071034852773266, 420,-10.9076584514292652, 0.0731482312084287128) 
-                     self$xStart=NA
+                     self$x0=NA
                    },
                    callG18=function(){
                      self$fn=function(x){
@@ -662,7 +662,7 @@ COP<-R6::R6Class("COP",
                                  -0.9876159387318453,0.1504778305249072,
                                  -0.6225959783340022,-0.782543417629948,
                                  0.0)
-                     self$xStart=NA 
+                     self$x0=NA 
                    },
                    callG19=function(){
                      # G19 fitness function
@@ -717,7 +717,7 @@ COP<-R6::R6Class("COP",
                        0, 0,  3.94600628013917,  0,    3.28318162727873,
                        10, 0, 0, 0,0,
                        0.370762125835098,  0.278454209512692,   0.523838440499861,     0.388621589976956,   0.29815843730292) 
-                     self$xStart=NA
+                     self$x0=NA
                    },
                    callG20=function(){
                      self$fn=function(x){
@@ -792,7 +792,7 @@ COP<-R6::R6Class("COP",
                                        1.239E-4,
                                        2.07E-5,
                                        1.829E-5) 
-                     self$xStart=NA
+                     self$x0=NA
                      self$info="As no feasible solution is known for G20, the provided solution is slightly infeasible, "
                    },
                    callG21=function(){
@@ -819,7 +819,7 @@ COP<-R6::R6Class("COP",
                                  6.68445185362377892,
                                  5.99168428444264833,
                                  6.21451648886070451); 
-                     self$xStart=NA 
+                     self$x0=NA 
                    },
                    callG22=function(){
                      self$fn=function(x){
@@ -878,7 +878,7 @@ COP<-R6::R6Class("COP",
                                  5.59531526444068827,
                                  5.43444479314453499,
                                  5.07517453535834395)  
-                     self$xStart=NA;
+                     self$x0=NA;
                      self$info="Please note that the provided solution is slightly infeasible"
                    },
                    callG23=function(){
@@ -900,7 +900,7 @@ COP<-R6::R6Class("COP",
                      self$upper=c(300,300,100,200,100,300,100,200,0.03)
                      self$nConstraints=6
                      self$solu=c(0,  100, 0,  100,  0,  0,   100, 200, 0.01) 
-                     self$xStart=NA  
+                     self$x0=NA  
                    },
                    callG24=function(){
                      self$fn=function(x){
@@ -915,7 +915,7 @@ COP<-R6::R6Class("COP",
                      self$upper=c(3,4)
                      self$nConstraints=2
                      self$solu=c(2.329520197477607, 3.17849307411768)
-                     self$xStart=NA 
+                     self$x0=NA 
                  }) # end of "privat = list( ..."
                
                  )  # end of "R6Class( ..."
